@@ -1,2 +1,6 @@
 /bias_detector_env
 /web/node_modules
+.env
+*.env
+__pycache__/
+*.pyc

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
+import BiasAnalysisSection from './BiasAnalysisSection'
 
 const panel: React.CSSProperties = {
   background: 'var(--panel)',
@@ -87,18 +88,22 @@ export default function App(){
     }
   }
 
+  // Extract plagiarism data (handles both old and new response format)
+  const plagiarismData = report?.plagiarism || report
+  const biasData = report?.bias_analysis || null
+
   return (
     <div style={{maxWidth: 1100, margin:'0 auto', padding: 24}}>
       <header style={{marginBottom: 24}}>
-        <h1 style={{margin:0}}>Research Paper Plagiarism & Similarity Analysis</h1>
-        <div style={{color:'#6b5b53'}}></div>
+        <h1 style={{margin:0}}>Research Paper Plagiarism & Bias Analysis</h1>
+        <div style={{color:'#6b5b53'}}>Powered by AI-driven bias detection</div>
       </header>
 
       <div style={{display:'grid', gridTemplateColumns:'1fr', gap: 16}}>
         <div style={panel}>
           <h3 style={{marginTop:0}}>Upload Academic Paper (PDF)</h3>
           <input type="file" accept="application/pdf" onChange={e=> setFile(e.target.files?.[0] || null)} />
-          <button onClick={onUpload} disabled={!file || loading} style={{marginLeft:12, background:'var(--accent)', color:'white', border:'none', padding:'8px 14px', borderRadius:6}}>
+          <button onClick={onUpload} disabled={!file || loading} style={{marginLeft:12, background:'var(--accent)', color:'white', border:'none', padding:'8px 14px', borderRadius:6, cursor: !file || loading ? 'not-allowed' : 'pointer', opacity: !file || loading ? 0.6 : 1}}>
             {loading ? 'Analyzing…' : 'Analyze'}
           </button>
           {error && <div style={{color:'#a00000', marginTop:8}}>{error}</div>}
@@ -106,17 +111,27 @@ export default function App(){
 
         {report && (
           <>
+            {/* Plagiarism Results */}
             <div style={panel}>
-              <h2 style={{marginTop:0}}>Overall Similarity</h2>
-              <div style={{fontSize: 28, fontWeight: 700}}>{report.overall_percent?.toFixed(2)}%</div>
-              <div style={{color:'#6b5b53'}}>{report.overall_category}</div>
+              <h2 style={{marginTop:0}}>📋 Plagiarism Analysis</h2>
+              <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+                <div style={{fontSize: 28, fontWeight: 700}}>{plagiarismData?.overall_percent?.toFixed(2)}%</div>
+                <div style={{color:'#6b5b53'}}>{plagiarismData?.overall_category}</div>
+              </div>
             </div>
 
-            <Section name="Title" data={report.sections?.Title} />
-            <Section name="Abstract" data={report.sections?.Abstract} />
-            <Section name="Methodology" data={report.sections?.Methodology} />
-            <Section name="Conclusions" data={report.sections?.Conclusions} />
+            <Section name="Title" data={plagiarismData?.sections?.Title} />
+            <Section name="Abstract" data={plagiarismData?.sections?.Abstract} />
+            <Section name="Methodology" data={plagiarismData?.sections?.Methodology} />
+            <Section name="Conclusions" data={plagiarismData?.sections?.Conclusions} />
+
+            {/* Bias Analysis Results */}
+            <BiasAnalysisSection data={biasData} loading={false} />
           </>
+        )}
+
+        {loading && (
+          <BiasAnalysisSection data={null} loading={true} />
         )}
       </div>
     </div>

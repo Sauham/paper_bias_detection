@@ -159,32 +159,76 @@ def _openalex_search(query: str, max_results: int) -> List[Dict]:
             OPENALEX_SEARCH,
             params={
                 "search": query,
-                "filter": "type:journal-article,has_abstract:true",
-                "per_page": max_results
+                "per_page": max_results,
+                "mailto": "research@example.com"  # Polite pool for better rate limits
             },
-            timeout=12
+            timeout=15,
+            headers={"User-Agent": "ResearchPaperAnalyzer/1.0"}
         )
         resp.raise_for_status()
         data = resp.json() or {}
-        return [{
-            "title": r.get("title", ""),
-            "abstract": " ".join(r.get("abstract_inverted_index", {}).keys()),
-            "url": r.get("id", ""),
-            "source": "OpenAlex"
-        } for r in data.get("results", [])]
+        results = []
+        for r in data.get("results", []):
+            # Reconstruct abstract from inverted index
+            abstract = ""
+            inverted_index = r.get("abstract_inverted_index", {})
+            if inverted_index:
+                # OpenAlex stores abstract as inverted index: {"word": [positions]}
+                words_with_positions = []
+                for word, positions in inverted_index.items():
+                    for pos in positions:
+                        words_with_positions.append((pos, word))
+                words_with_positions.sort()
+                abstract = " ".join(w for _, w in words_with_positions)
+            
+            results.append({
+                "title": r.get("title", "") or r.get("display_name", ""),
+                "abstract": abstract,
+                "url": r.get("id", ""),
+                "source": "OpenAlex"
+            })
+        return results
     except Exception as e:
         logger.warning(f"OpenAlex search failed: {e}")
         return []
 
 
 # -------------------- CORE ANALYSIS -------------------- #
+
+# Common academic stop words to filter out
+ACADEMIC_STOP_WORDS = {
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+    'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+    'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
+    'this', 'that', 'these', 'those', 'it', 'its', 'we', 'our', 'their',
+    'they', 'them', 'which', 'who', 'whom', 'what', 'where', 'when', 'how',
+    'paper', 'study', 'research', 'proposed', 'method', 'approach', 'using',
+    'based', 'results', 'show', 'shows', 'shown', 'also', 'however', 'thus',
+    'figure', 'table', 'section', 'following', 'provide', 'present', 'work',
+    'used', 'use', 'case', 'given', 'describe', 'described', 'introduction',
+    'abstract', 'conclusion', 'conclusions', 'related', 'previous', 'other'
+}
+
 def build_search_query(text: str) -> str:
     """
     Build a short, effective academic search query
-    from section text.
+    from section text. Extracts meaningful technical keywords.
     """
-    words = re.findall(r"[A-Za-z]{4,}", text)
-    return " ".join(words[:12])
+    # Extract words (4+ characters, alphabetic)
+    words = re.findall(r"[A-Za-z]{4,}", text.lower())
+    
+    # Filter out stop words and deduplicate
+    keywords = []
+    seen = set()
+    for word in words:
+        if word not in ACADEMIC_STOP_WORDS and word not in seen:
+            keywords.append(word)
+            seen.add(word)
+            if len(keywords) >= 10:
+                break
+    
+    return " ".join(keywords)
 
 
 def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict]:
@@ -194,8 +238,10 @@ def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict
     """
     query = build_search_query(section_text)
     if not query:
+        logger.warning("Could not build search query from text")
         return []
 
+    logger.info(f"Search query: {query[:80]}...")
     results = []
     seen_titles = set()  # Deduplicate by title
 
@@ -219,6 +265,7 @@ def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict
 
     # 2. Semantic Scholar Search
     try:
+        logger.info("Searching Semantic Scholar...")
         resp = requests.get(
             SEMANTIC_SCHOLAR_SEARCH,
             params={
@@ -226,26 +273,36 @@ def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict
                 "limit": max_results,
                 "fields": "title,abstract,url"
             },
-            timeout=10
+            timeout=15,
+            headers={"User-Agent": "ResearchPaperAnalyzer/1.0"}
         )
+        logger.info(f"Semantic Scholar response: {resp.status_code}")
         if resp.status_code == 200:
             data = resp.json()
-            for item in data.get("data", []):
+            ss_papers = data.get("data", [])
+            logger.info(f"Semantic Scholar returned {len(ss_papers)} papers")
+            for item in ss_papers:
                 title = item.get("title", "").lower().strip()
                 if title and title not in seen_titles:
                     seen_titles.add(title)
                     results.append({
                         "title": item.get("title", ""),
-                        "abstract": item.get("abstract", ""),
-                        "url": item.get("url", ""),
+                        "abstract": item.get("abstract", "") or "",
+                        "url": item.get("url", "") or f"https://www.semanticscholar.org/paper/{item.get('paperId', '')}",
                         "source": "SemanticScholar"
                     })
+        elif resp.status_code == 429:
+            logger.warning("Semantic Scholar rate limited")
+        else:
+            logger.warning(f"Semantic Scholar returned {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
         logger.warning(f"Semantic Scholar search failed: {e}")
 
     # 3. OpenAlex Search
     try:
-        openalex_results = _openalex_search(query, max_results // 2)
+        logger.info("Searching OpenAlex...")
+        openalex_results = _openalex_search(query, max_results)
+        logger.info(f"OpenAlex returned {len(openalex_results)} results")
         for item in openalex_results:
             title = item.get("title", "").lower().strip()
             if title and title not in seen_titles:

@@ -1,6 +1,57 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import axios from 'axios'
 import BiasAnalysisSection from './BiasAnalysisSection'
+
+// Custom hook for scroll-based animations
+function useScrollAnimation(direction: 'up' | 'down' | 'left' | 'right' = 'up', threshold = 0.1) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Only trigger animation once when element comes into view
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+        }
+      },
+      { threshold, rootMargin: '0px 0px -50px 0px' }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => {
+      if (ref.current) {
+        observer.unobserve(ref.current)
+      }
+    }
+  }, [threshold])
+
+  const getAnimationStyle = (): React.CSSProperties => {
+    const baseStyle: React.CSSProperties = {
+      transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+    }
+
+    if (!isVisible) {
+      switch (direction) {
+        case 'up':
+          return { ...baseStyle, opacity: 0, transform: 'translateY(40px)' }
+        case 'down':
+          return { ...baseStyle, opacity: 0, transform: 'translateY(-40px)' }
+        case 'left':
+          return { ...baseStyle, opacity: 0, transform: 'translateX(40px)' }
+        case 'right':
+          return { ...baseStyle, opacity: 0, transform: 'translateX(-40px)' }
+      }
+    }
+
+    return { ...baseStyle, opacity: 1, transform: 'translate(0, 0)' }
+  }
+
+  return { ref, isVisible, style: getAnimationStyle() }
+}
 
 // Styles
 const styles = {
@@ -14,7 +65,7 @@ const styles = {
   header: {
     textAlign: 'center' as const,
     marginBottom: 48,
-    animation: 'fadeIn 0.6s ease-out',
+    animation: 'fadeInDown 0.8s ease-out',
   } as React.CSSProperties,
 
   logo: {
@@ -37,9 +88,11 @@ const styles = {
   } as React.CSSProperties,
 
   title: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 700,
-    background: 'var(--accent-gradient)',
+    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%)',
+    backgroundSize: '200% 200%',
+    animation: 'gradientShift 4s ease infinite',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
     backgroundClip: 'text',
@@ -49,7 +102,8 @@ const styles = {
     color: 'var(--text-secondary)',
     fontSize: 16,
     maxWidth: 600,
-    margin: '0 auto',
+    margin: '16px auto 0',
+    animation: 'fadeInUp 0.8s ease-out 0.2s both',
   } as React.CSSProperties,
 
   card: {
@@ -58,8 +112,8 @@ const styles = {
     border: '1px solid var(--border-color)',
     padding: 24,
     marginBottom: 24,
-    transition: 'all 0.3s ease',
-    animation: 'slideUp 0.5s ease-out',
+    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+    animation: 'fadeInUp 0.6s ease-out both',
   } as React.CSSProperties,
 
   cardHover: {
@@ -250,6 +304,8 @@ function FileUpload({
   loading: boolean 
 }) {
   const [isDragging, setIsDragging] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const [buttonHovered, setButtonHovered] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -284,9 +340,26 @@ function FileUpload({
   }, [onFileChange])
 
   return (
-    <div style={styles.card}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <span style={{ fontSize: 24 }}>📄</span>
+    <div style={{ 
+      ...styles.card, 
+      animationDelay: '0.1s',
+      transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+      boxShadow: isHovered ? 'var(--shadow-lg)' : 'var(--shadow-sm)',
+    }}
+    onMouseEnter={() => setIsHovered(true)}
+    onMouseLeave={() => setIsHovered(false)}
+    >
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 12, 
+        marginBottom: 20,
+        animation: 'fadeInLeft 0.6s ease-out 0.2s both',
+      }}>
+        <span style={{ 
+          fontSize: 24,
+          animation: 'float 3s ease-in-out infinite',
+        }}>📄</span>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Upload Research Paper</h2>
       </div>
 
@@ -294,7 +367,9 @@ function FileUpload({
         style={{
           ...styles.uploadZone,
           ...(isDragging ? styles.uploadZoneActive : {}),
-          ...(file ? { borderColor: 'var(--success)', background: 'var(--success-bg)' } : {})
+          ...(file ? { borderColor: 'var(--success)', background: 'var(--success-bg)' } : {}),
+          transform: isDragging ? 'scale(1.02)' : 'scale(1)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
         onDragEnter={handleDragIn}
         onDragLeave={handleDragOut}
@@ -312,17 +387,33 @@ function FileUpload({
         
         {file ? (
           <>
-            <span style={styles.uploadIcon}>✅</span>
-            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--success)', marginBottom: 8 }}>
+            <span style={{ 
+              ...styles.uploadIcon,
+              animation: 'bounceIn 0.6s ease-out',
+            }}>✅</span>
+            <div style={{ 
+              fontSize: 18, 
+              fontWeight: 600, 
+              color: 'var(--success)', 
+              marginBottom: 8,
+              animation: 'fadeInUp 0.5s ease-out 0.2s both',
+            }}>
               {file.name}
             </div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+            <div style={{ 
+              color: 'var(--text-secondary)', 
+              fontSize: 14,
+              animation: 'fadeInUp 0.5s ease-out 0.3s both',
+            }}>
               {(file.size / 1024 / 1024).toFixed(2)} MB - Click to change
             </div>
           </>
         ) : (
           <>
-            <span style={styles.uploadIcon}>📤</span>
+            <span style={{ 
+              ...styles.uploadIcon,
+              animation: isDragging ? 'bounceIn 0.3s ease-out' : 'float 3s ease-in-out infinite',
+            }}>📤</span>
             <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>
               Drag & drop your PDF here
             </div>
@@ -337,9 +428,15 @@ function FileUpload({
         <button
           onClick={onAnalyze}
           disabled={!file || loading}
+          onMouseEnter={() => setButtonHovered(true)}
+          onMouseLeave={() => setButtonHovered(false)}
           style={{
             ...styles.button,
-            ...(!file || loading ? styles.buttonDisabled : {})
+            ...(!file || loading ? styles.buttonDisabled : {}),
+            transform: buttonHovered && file && !loading ? 'translateY(-2px) scale(1.05)' : 'translateY(0) scale(1)',
+            boxShadow: buttonHovered && file && !loading ? 'var(--shadow-glow)' : 'var(--shadow-md)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            animation: 'fadeInUp 0.6s ease-out 0.3s both',
           }}
         >
           {loading ? (
@@ -349,12 +446,36 @@ function FileUpload({
             </>
           ) : (
             <>
-              <span>🔍</span>
+              <span style={{ 
+                display: 'inline-block',
+                animation: buttonHovered && file ? 'pulse 1s ease-in-out infinite' : 'none',
+              }}>🔍</span>
               Analyze Paper
             </>
           )}
         </button>
       </div>
+    </div>
+  )
+}
+
+function StatCard({ children, delay = 0, highlight = false }: { children: React.ReactNode; delay?: number; highlight?: boolean }) {
+  const [isHovered, setIsHovered] = useState(false)
+  
+  return (
+    <div 
+      style={{ 
+        ...styles.statCard,
+        animation: `fadeInUp 0.6s ease-out ${delay}s both`,
+        transform: isHovered ? 'translateY(-6px) scale(1.02)' : 'translateY(0) scale(1)',
+        boxShadow: isHovered ? 'var(--shadow-lg)' : 'var(--shadow-sm)',
+        borderColor: isHovered ? 'var(--accent-primary)' : highlight ? 'var(--accent-primary)' : 'var(--border-color)',
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {children}
     </div>
   )
 }
@@ -367,51 +488,93 @@ function OverviewStats({ plagiarism }: { plagiarism: any }) {
 
   return (
     <div style={styles.statsGrid}>
-      <div style={{ ...styles.statCard, borderColor: color }}>
-        <div style={{ fontSize: 36, fontWeight: 700, color }}>{percent.toFixed(1)}%</div>
+      <StatCard delay={0.1} highlight>
+        <div style={{ 
+          fontSize: 42, 
+          fontWeight: 700, 
+          color,
+          animation: 'bounceIn 0.8s ease-out 0.3s both',
+        }}>{percent.toFixed(1)}%</div>
         <div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>Overall Similarity</div>
         <div style={styles.progressBar}>
-          <div style={{ ...styles.progressFill, width: `${percent}%`, background: color }} />
+          <div style={{ 
+            ...styles.progressFill, 
+            width: `${percent}%`, 
+            background: `linear-gradient(90deg, ${color}, ${color}dd)`,
+            animation: 'slideRight 1s ease-out 0.5s both',
+          }} />
         </div>
-      </div>
+      </StatCard>
       
-      <div style={styles.statCard}>
-        <div style={{ ...styles.badge, background: bg, color, display: 'inline-block', fontSize: 14, marginBottom: 8 }}>
+      <StatCard delay={0.2}>
+        <div style={{ 
+          ...styles.badge, 
+          background: bg, 
+          color, 
+          display: 'inline-block', 
+          fontSize: 14, 
+          marginBottom: 8,
+          animation: 'scaleIn 0.5s ease-out 0.4s both',
+        }}>
           {label} Similarity
         </div>
         <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 8 }}>
           {plagiarism?.overall_category || 'Analysis complete'}
         </div>
-      </div>
+      </StatCard>
 
-      <div style={styles.statCard}>
-        <div style={{ fontSize: 24, marginBottom: 8 }}>📊</div>
+      <StatCard delay={0.3}>
+        <div style={{ 
+          fontSize: 28, 
+          marginBottom: 8,
+          animation: 'float 3s ease-in-out infinite',
+        }}>📊</div>
         <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
           4 Sections Analyzed
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
           Title, Abstract, Methodology, Conclusions
         </div>
-      </div>
+      </StatCard>
     </div>
   )
 }
 
-function SectionResult({ name, data, icon }: { name: string; data: any; icon: string }) {
+function SectionResult({ name, data, icon, delay = 0, direction = 'left' }: { name: string; data: any; icon: string; delay?: number; direction?: 'left' | 'right' }) {
   const [expanded, setExpanded] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const scrollAnim = useScrollAnimation(direction)
   const percent = data?.best_similarity_percent || 0
   const color = getSimilarityColor(percent)
   const bg = getSimilarityBg(percent)
   const matches = data?.matches || []
 
   return (
-    <div style={{ ...styles.card, animationDelay: '0.1s' }}>
+    <div 
+      ref={scrollAnim.ref}
+      style={{ 
+        ...styles.card, 
+        ...scrollAnim.style,
+        transitionDelay: `${delay}s`,
+        transform: scrollAnim.isVisible 
+          ? (isHovered ? 'translateY(-4px) scale(1.01)' : 'translateY(0) scale(1)')
+          : scrollAnim.style.transform,
+        boxShadow: isHovered ? 'var(--shadow-lg)' : 'var(--shadow-sm)',
+        borderColor: isHovered ? 'var(--accent-primary)' : 'var(--border-color)',
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div 
         style={styles.sectionHeader}
         onClick={() => setExpanded(!expanded)}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 24 }}>{icon}</span>
+          <span style={{ 
+            fontSize: 24,
+            transition: 'transform 0.3s ease',
+            transform: isHovered ? 'scale(1.2) rotate(5deg)' : 'scale(1) rotate(0deg)',
+          }}>{icon}</span>
           <div>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{name}</h3>
             <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -422,7 +585,13 @@ function SectionResult({ name, data, icon }: { name: string; data: any; icon: st
         
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color }}>{percent.toFixed(1)}%</div>
+            <div style={{ 
+              fontSize: 24, 
+              fontWeight: 700, 
+              color,
+              transition: 'transform 0.3s ease',
+              transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+            }}>{percent.toFixed(1)}%</div>
             <span style={{ ...styles.badge, background: bg, color }}>
               {getSimilarityLabel(percent)}
             </span>
@@ -431,7 +600,7 @@ function SectionResult({ name, data, icon }: { name: string; data: any; icon: st
             fontSize: 20, 
             color: 'var(--text-muted)',
             transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.3s ease'
+            transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
           }}>
             ▼
           </span>
@@ -443,7 +612,7 @@ function SectionResult({ name, data, icon }: { name: string; data: any; icon: st
           marginTop: 16, 
           paddingTop: 16, 
           borderTop: '1px solid var(--border-color)',
-          animation: 'slideUp 0.3s ease-out'
+          animation: 'fadeInUp 0.4s ease-out'
         }}>
           {matches.length > 0 ? (
             <table style={styles.table}>
@@ -499,14 +668,75 @@ function SectionResult({ name, data, icon }: { name: string; data: any; icon: st
   )
 }
 
+// Scroll animation wrapper component for main sections
+function ScrollSection({ 
+  children, 
+  direction = 'up',
+  delay = 0 
+}: { 
+  children: React.ReactNode
+  direction?: 'up' | 'down' | 'left' | 'right'
+  delay?: number 
+}) {
+  const scrollAnim = useScrollAnimation(direction)
+  
+  return (
+    <div 
+      ref={scrollAnim.ref}
+      style={{ 
+        ...scrollAnim.style,
+        transitionDelay: `${delay}s`,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
 function LoadingOverlay({ message }: { message: string }) {
   return (
-    <div style={styles.loadingOverlay}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ ...styles.spinner, margin: '0 auto 24px' }} />
-        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>{message}</div>
-        <div style={{ color: 'var(--text-secondary)' }}>
+    <div style={{ ...styles.loadingOverlay, animation: 'fadeIn 0.3s ease-out' }}>
+      <div style={{ 
+        textAlign: 'center',
+        animation: 'scaleIn 0.5s ease-out',
+      }}>
+        <div style={{ 
+          ...styles.spinner, 
+          margin: '0 auto 24px',
+          width: 56,
+          height: 56,
+          borderWidth: 4,
+        }} />
+        <div style={{ 
+          fontSize: 22, 
+          fontWeight: 600, 
+          marginBottom: 8,
+          background: 'var(--accent-gradient)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+        }}>{message}</div>
+        <div style={{ 
+          color: 'var(--text-secondary)',
+          animation: 'pulse 2s ease-in-out infinite',
+        }}>
           This may take a moment...
+        </div>
+        <div style={{
+          marginTop: 24,
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 8,
+        }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: 'var(--accent-primary)',
+              animation: `pulse 1.5s ease-in-out infinite ${i * 0.2}s`,
+            }} />
+          ))}
         </div>
       </div>
     </div>
@@ -562,7 +792,6 @@ export default function App() {
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.logo}>
-          <div style={styles.logoIcon}>📚</div>
           <h1 style={styles.title}>Research Paper Analyzer</h1>
         </div>
         <p style={styles.subtitle}>
@@ -581,8 +810,15 @@ export default function App() {
 
       {/* Error Display */}
       {error && (
-        <div style={{ ...styles.error, marginBottom: 24 }}>
-          <span style={{ fontSize: 24 }}>⚠️</span>
+        <div style={{ 
+          ...styles.error, 
+          marginBottom: 24,
+          animation: 'fadeInUp 0.5s ease-out',
+        }}>
+          <span style={{ 
+            fontSize: 24,
+            animation: 'bounceIn 0.6s ease-out',
+          }}>⚠️</span>
           <div>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Analysis Failed</div>
             <div style={{ fontSize: 14 }}>{error}</div>
@@ -594,28 +830,38 @@ export default function App() {
       {report && (
         <>
           {/* Overview Stats */}
-          <div style={{ ...styles.card, background: 'transparent', border: 'none', padding: 0 }}>
-            <h2 style={{ 
-              fontSize: 24, 
-              fontWeight: 600, 
-              marginBottom: 20,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12
+          <ScrollSection direction="down">
+            <div style={{ 
+              ...styles.card, 
+              background: 'transparent', 
+              border: 'none', 
+              padding: 0,
             }}>
-              <span>📋</span> Plagiarism Analysis Results
-            </h2>
-            <OverviewStats plagiarism={plagiarismData} />
-          </div>
+              <h2 style={{ 
+                fontSize: 24, 
+                fontWeight: 600, 
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}>
+                <span>📋</span> 
+                <span>Plagiarism Analysis Results</span>
+              </h2>
+              <OverviewStats plagiarism={plagiarismData} />
+            </div>
+          </ScrollSection>
 
-          {/* Section Results */}
-          <SectionResult name="Title" data={plagiarismData?.sections?.Title} icon="📝" />
-          <SectionResult name="Abstract" data={plagiarismData?.sections?.Abstract} icon="📄" />
-          <SectionResult name="Methodology" data={plagiarismData?.sections?.Methodology} icon="🔬" />
-          <SectionResult name="Conclusions" data={plagiarismData?.sections?.Conclusions} icon="✅" />
+          {/* Section Results - alternating left/right scroll animations */}
+          <SectionResult name="Title" data={plagiarismData?.sections?.Title} icon="📝" delay={0} direction="left" />
+          <SectionResult name="Abstract" data={plagiarismData?.sections?.Abstract} icon="📄" delay={0.1} direction="right" />
+          <SectionResult name="Methodology" data={plagiarismData?.sections?.Methodology} icon="🔬" delay={0.2} direction="left" />
+          <SectionResult name="Conclusions" data={plagiarismData?.sections?.Conclusions} icon="✅" delay={0.3} direction="right" />
 
-          {/* Bias Analysis */}
-          <BiasAnalysisSection data={biasData} loading={false} />
+          {/* Bias Analysis - scroll up animation */}
+          <ScrollSection direction="up" delay={0.2}>
+            <BiasAnalysisSection data={biasData} loading={false} />
+          </ScrollSection>
         </>
       )}
     </div>

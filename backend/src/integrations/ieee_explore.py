@@ -17,8 +17,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # IEEE Xplore API configuration
-IEEE_API_KEY = os.getenv("IEEE_API_KEY")
 IEEE_BASE_URL = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
+
+
+def _get_ieee_api_key() -> Optional[str]:
+    """Get IEEE API key - loaded lazily to ensure .env is loaded first."""
+    return os.getenv("IEEE_API_KEY")
 
 
 def _extract_keywords(text: str, max_words: int = 8) -> str:
@@ -97,7 +101,8 @@ def ieee_search(
         - citing_paper_count: Number of citations
         - source: Always "IEEE"
     """
-    if not IEEE_API_KEY:
+    api_key = _get_ieee_api_key()
+    if not api_key:
         logger.warning("IEEE_API_KEY not configured. IEEE search disabled.")
         return []
     
@@ -116,7 +121,7 @@ def ieee_search(
     # Build API parameters based on IEEE documentation
     # Keep parameters simple for better results
     params = {
-        "apikey": IEEE_API_KEY,
+        "apikey": api_key,
         "format": "json",
         "max_records": min(max_results, 25),  # Keep it small for speed
         "start_record": 1,
@@ -204,14 +209,15 @@ def ieee_search_by_doi(doi: str) -> Optional[Dict[str, Any]]:
     Returns:
         Paper metadata dict or None if not found
     """
-    if not IEEE_API_KEY:
+    api_key = _get_ieee_api_key()
+    if not api_key:
         return None
     
     if not doi:
         return None
     
     params = {
-        "apikey": IEEE_API_KEY,
+        "apikey": api_key,
         "format": "json",
         "doi": doi
     }
@@ -248,7 +254,8 @@ def ieee_search_by_title(title: str, exact_match: bool = False) -> List[Dict[str
     Returns:
         List of matching papers
     """
-    if not IEEE_API_KEY:
+    api_key = _get_ieee_api_key()
+    if not api_key:
         return []
     
     if not title or len(title.strip()) < 5:
@@ -259,7 +266,7 @@ def ieee_search_by_title(title: str, exact_match: bool = False) -> List[Dict[str
     clean_title = ' '.join(clean_title.split()[:15])  # Limit to first 15 words
     
     params = {
-        "apikey": IEEE_API_KEY,
+        "apikey": api_key,
         "format": "json",
         "max_records": 5,
         "article_title": clean_title
@@ -294,20 +301,21 @@ def check_ieee_api_status() -> Dict[str, Any]:
     Returns:
         Status dict with 'available', 'message', and 'api_key_configured' fields
     """
+    api_key = _get_ieee_api_key()
     status = {
         "available": False,
-        "api_key_configured": bool(IEEE_API_KEY),
+        "api_key_configured": bool(api_key),
         "message": ""
     }
     
-    if not IEEE_API_KEY:
+    if not api_key:
         status["message"] = "IEEE_API_KEY not configured in environment"
         return status
     
     try:
         # Simple test query
         params = {
-            "apikey": IEEE_API_KEY,
+            "apikey": api_key,
             "format": "json",
             "max_records": 1,
             "querytext": "machine learning"

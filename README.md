@@ -2,8 +2,6 @@
 
 A comprehensive, open-source web tool for analyzing academic papers for plagiarism and bias detection.
 
-![Upload Interface](assets/screenshot-upload.png)
-
 ## Why This Tool?
 
 ### The Problem with Existing Solutions
@@ -54,7 +52,7 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 ## Screenshots
 
 ### Plagiarism Analysis Results
-![Plagiarism Results](assets/screenshot-results.png)
+![Plagiarism Results](assets/screenshot-plagiarism.png)
 
 ### AI Bias Detection
 ![Bias Analysis](assets/screenshot-bias.png)

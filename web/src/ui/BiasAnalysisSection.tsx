@@ -1,4 +1,54 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+
+// Custom hook for scroll-based animations
+function useScrollAnimation(direction: 'up' | 'down' | 'left' | 'right' = 'up', threshold = 0.1) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+        }
+      },
+      { threshold, rootMargin: '0px 0px -30px 0px' }
+    )
+
+    if (ref.current) {
+      observer.observe(ref.current)
+    }
+
+    return () => {
+      if (ref.current) {
+        observer.unobserve(ref.current)
+      }
+    }
+  }, [threshold])
+
+  const getAnimationStyle = (): React.CSSProperties => {
+    const baseStyle: React.CSSProperties = {
+      transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+    }
+
+    if (!isVisible) {
+      switch (direction) {
+        case 'up':
+          return { ...baseStyle, opacity: 0, transform: 'translateY(30px)' }
+        case 'down':
+          return { ...baseStyle, opacity: 0, transform: 'translateY(-30px)' }
+        case 'left':
+          return { ...baseStyle, opacity: 0, transform: 'translateX(30px)' }
+        case 'right':
+          return { ...baseStyle, opacity: 0, transform: 'translateX(-30px)' }
+      }
+    }
+
+    return { ...baseStyle, opacity: 1, transform: 'translate(0, 0)' }
+  }
+
+  return { ref, isVisible, style: getAnimationStyle() }
+}
 
 // Types for bias analysis data
 interface BiasInstance {
@@ -248,20 +298,36 @@ function ScoreGauge({ score, severity }: { score: number; severity: 'low' | 'mod
 function BiasCard({ 
   bias, 
   isExpanded, 
-  onToggle 
+  onToggle,
+  direction = 'left',
+  delay = 0
 }: { 
   bias: BiasInstance
   isExpanded: boolean
-  onToggle: () => void 
+  onToggle: () => void
+  direction?: 'left' | 'right'
+  delay?: number
 }) {
   const severityStyle = severityConfig[bias.severity]
   const typeConfig = biasTypeConfig[bias.type] || biasTypeConfig['Unknown']
+  const scrollAnim = useScrollAnimation(direction)
+  const [isHovered, setIsHovered] = useState(false)
 
   return (
-    <div style={{
-      ...styles.biasCard,
-      borderColor: isExpanded ? severityStyle.color : 'var(--border-color)'
-    }}>
+    <div 
+      ref={scrollAnim.ref}
+      style={{
+        ...styles.biasCard,
+        ...scrollAnim.style,
+        transitionDelay: `${delay}s`,
+        borderColor: isExpanded ? severityStyle.color : (isHovered ? 'var(--accent-primary)' : 'var(--border-color)'),
+        transform: scrollAnim.isVisible 
+          ? (isHovered ? 'translateX(4px)' : 'translateX(0)')
+          : scrollAnim.style.transform,
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div 
         style={{
           ...styles.biasHeader,
@@ -496,6 +562,8 @@ export default function BiasAnalysisSection({ data, loading }: BiasAnalysisSecti
               bias={bias}
               isExpanded={expandedBiases.has(index)}
               onToggle={() => toggleBias(index)}
+              direction={index % 2 === 0 ? 'left' : 'right'}
+              delay={index * 0.1}
             />
           ))}
         </div>
@@ -520,57 +588,80 @@ export default function BiasAnalysisSection({ data, loading }: BiasAnalysisSecti
       
       {/* Strengths */}
       {data.strengths && data.strengths.length > 0 && (
-        <div style={styles.strengthsList}>
-          <div 
-            style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              cursor: 'pointer'
-            }}
-            onClick={() => setShowStrengths(!showStrengths)}
-          >
-            <h3 style={{ 
-              margin: 0, 
-              fontSize: 16, 
-              fontWeight: 600,
-              color: severityConfig.low.color,
+        <StrengthsSection 
+          strengths={data.strengths}
+          showStrengths={showStrengths}
+          setShowStrengths={setShowStrengths}
+        />
+      )}
+    </div>
+  )
+}
+
+// Separate component for strengths with scroll animation
+function StrengthsSection({ 
+  strengths, 
+  showStrengths, 
+  setShowStrengths 
+}: { 
+  strengths: string[]
+  showStrengths: boolean
+  setShowStrengths: (show: boolean) => void
+}) {
+  const scrollAnim = useScrollAnimation('up')
+  
+  return (
+    <div ref={scrollAnim.ref} style={{ ...styles.strengthsList, ...scrollAnim.style }}>
+      <div 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          cursor: 'pointer'
+        }}
+        onClick={() => setShowStrengths(!showStrengths)}
+      >
+        <h3 style={{ 
+          margin: 0, 
+          fontSize: 16, 
+          fontWeight: 600,
+          color: severityConfig.low.color,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <span>✅</span>
+          Identified Strengths ({strengths.length})
+        </h3>
+        <span style={{ 
+          color: 'var(--text-muted)',
+          transform: showStrengths ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease'
+        }}>
+          ▼
+        </span>
+      </div>
+      
+      {showStrengths && (
+        <ul style={{ 
+          margin: '16px 0 0 0', 
+          paddingLeft: 24,
+          listStyle: 'none',
+          animation: 'fadeInUp 0.4s ease-out'
+        }}>
+          {strengths.map((strength, index) => (
+            <li key={index} style={{ 
+              marginBottom: 8, 
               display: 'flex',
-              alignItems: 'center',
-              gap: 8
+              alignItems: 'flex-start',
+              gap: 8,
+              animation: `fadeInUp 0.4s ease-out ${index * 0.05}s both`
             }}>
-              <span>✅</span>
-              Identified Strengths ({data.strengths.length})
-            </h3>
-            <span style={{ 
-              color: 'var(--text-muted)',
-              transform: showStrengths ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s ease'
-            }}>
-              ▼
-            </span>
-          </div>
-          
-          {showStrengths && (
-            <ul style={{ 
-              margin: '16px 0 0 0', 
-              paddingLeft: 24,
-              listStyle: 'none'
-            }}>
-              {data.strengths.map((strength, index) => (
-                <li key={index} style={{ 
-                  marginBottom: 8, 
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8
-                }}>
-                  <span style={{ color: severityConfig.low.color }}>•</span>
-                  <span>{strength}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              <span style={{ color: severityConfig.low.color }}>•</span>
+              <span>{strength}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )

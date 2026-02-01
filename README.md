@@ -2,6 +2,8 @@
 
 A comprehensive, open-source web tool for analyzing academic papers for plagiarism and bias detection.
 
+![Upload Interface](assets/screenshot-upload.png)
+
 ## Why This Tool?
 
 ### The Problem with Existing Solutions
@@ -49,6 +51,16 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 1. **Plagiarism Detection**: Evaluates similarity against published academic work from IEEE Xplore, Semantic Scholar, and OpenAlex
 2. **AI Bias Analysis**: Detects 6 types of academic bias using Google's Gemini AI with actionable improvement suggestions
 
+## Screenshots
+
+### Plagiarism Analysis Results
+![Plagiarism Results](assets/screenshot-results.png)
+
+### AI Bias Detection
+![Bias Analysis](assets/screenshot-bias.png)
+
+---
+
 ## Features
 
 ### Plagiarism Detection
@@ -73,6 +85,14 @@ Powered by Google's Gemini AI, detects:
 - **Funding Bias**: Undisclosed conflicts of interest
 - **Citation Bias**: Selective citing supporting predetermined views
 - **Methodology Bias**: Flawed experimental design
+
+**Bias Score Classification:**
+| Score | Severity | Meaning |
+|-------|----------|---------|
+| 0-25 | Low | Excellent objectivity |
+| 26-50 | Moderate | Some concerns present |
+| 51-75 | High | Significant issues detected |
+| 76-100 | Severe | Major credibility concerns |
 
 Provides:
 - Overall bias score (0-100)
@@ -122,6 +142,8 @@ web/
       App.tsx                # Main application UI
       BiasAnalysisSection.tsx # Bias analysis results component
   vite.config.ts             # Vite configuration
+
+assets/                      # Screenshots and images
 ```
 
 ---
@@ -240,9 +262,9 @@ Upload a PDF file for analysis.
     }
   },
   "bias_analysis": {
-    "overall_score": 25,
-    "severity": "low",
-    "summary": "...",
+    "overall_score": 85,
+    "severity": "high",
+    "summary": "The paper proposes an interesting framework but suffers from significant methodological and reporting biases.",
     "biases": [...],
     "strengths": [...]
   }
@@ -307,9 +329,3 @@ Health check endpoint.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-## License
-
-MIT License

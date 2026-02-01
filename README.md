@@ -1,13 +1,53 @@
 # Research Paper Analyzer
 
-A comprehensive web tool for analyzing academic papers for plagiarism and bias detection.
+A comprehensive, open-source web tool for analyzing academic papers for plagiarism and bias detection.
+
+## Why This Tool?
+
+### The Problem with Existing Solutions
+
+Academic plagiarism detection is dominated by expensive, proprietary tools that lack critical features researchers actually need:
+
+| Tool | Cost | Bias Detection | Self-Hosted | Academic DBs | Open Source |
+|------|------|----------------|-------------|--------------|-------------|
+| **Turnitin** | $3+/student/year (institutional only) | No | No | Limited | No |
+| **iThenticate** | $125/document | No | No | Yes | No |
+| **Grammarly** | $12-30/month | No | No | Limited | No |
+| **Copyscape** | $0.03/search | No | No | No (web only) | No |
+| **This Tool** | **Free** | **Yes (AI-powered)** | **Yes** | **Yes (3 sources)** | **Yes** |
+
+### What Existing Tools Are Missing
+
+**1. No Bias Detection**
+Turnitin, iThenticate, and Grammarly only detect text similarity. They completely ignore academic bias—a critical factor in research integrity. Our tool uses Google's Gemini AI to detect:
+- Confirmation bias, Selection bias, Publication bias
+- Funding bias, Citation bias, Methodology bias
+
+**2. Prohibitive Pricing**
+- Turnitin requires institutional licensing ($10,000+ for universities)
+- iThenticate charges **$125 per document**—impractical for students
+- Students cannot purchase Turnitin individually
+
+**3. No Data Privacy**
+Commercial tools upload your research to their servers. Some index submissions permanently. Our tool is **self-hosted**—your research never leaves your machine.
+
+**4. Limited Transparency**
+Proprietary tools are black boxes. You can't verify their algorithms or customize them. Our tool is fully open-source.
+
+**5. No Actionable Feedback**
+Traditional tools show similarity percentages without context. We provide:
+- Section-by-section analysis (Title, Abstract, Methodology, Conclusions)
+- Direct links to matching sources
+- AI-generated suggestions for improvement
+
+---
 
 ## Project Overview
 
-Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), extracts main sections — Title, Abstract, Methodology, and Conclusions — and provides:
+Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), extracts main sections, and provides:
 
-1. **Plagiarism Detection**: Evaluates similarity against published academic work
-2. **AI Bias Analysis**: Detects various types of academic bias using Google's Gemini AI
+1. **Plagiarism Detection**: Evaluates similarity against published academic work from IEEE Xplore, Semantic Scholar, and OpenAlex
+2. **AI Bias Analysis**: Detects 6 types of academic bias using Google's Gemini AI with actionable improvement suggestions
 
 ## Features
 
@@ -15,9 +55,9 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 - Extracts text from uploaded PDFs (with robust fallbacks using PyMuPDF, pdfminer, and OCR)
 - Splits content into four sections: Title, Abstract, Methodology, Conclusions
 - Searches multiple academic databases:
-  - **IEEE Xplore** (requires API key)
-  - **Semantic Scholar**
-  - **OpenAlex**
+  - **IEEE Xplore** (6M+ documents)
+  - **Semantic Scholar** (200M+ papers)
+  - **OpenAlex** (250M+ works)
 - Computes TF-IDF cosine similarity to estimate overlap
 - Classifies similarity levels:
   - 0–25%: Low similarity (mostly original)
@@ -40,12 +80,14 @@ Provides:
 - Actionable suggestions for improvement
 - Identified strengths in the paper
 
+---
+
 ## Tech Stack
 
 ### Backend
 - Python 3.9+
 - FastAPI
-- Google Generative AI (Gemini)
+- Google GenAI SDK (Gemini)
 - PDF Processing: PyMuPDF, pdfplumber, pdfminer.six, pytesseract
 - ML: scikit-learn, numpy, scipy
 
@@ -88,8 +130,8 @@ web/
 
 ### Backend
 - Python 3.9+
-- Gemini API key (for bias analysis)
-- IEEE Xplore API key (optional, for enhanced plagiarism detection)
+- Gemini API key (free tier available)
+- IEEE Xplore API key (optional, enhances plagiarism detection)
 
 ### Frontend
 - Node.js 18+
@@ -118,38 +160,26 @@ cp .env.example .env
 Edit `.env` with your keys:
 
 ```env
-# Required for bias analysis
+# Required for bias analysis (free tier available)
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# Model selection - choose one:
-#   gemini-2.5-flash  (recommended - latest and fastest)
-#   gemini-2.0-flash  (stable)
-#   gemini-1.5-flash  (legacy)
-#   gemini-1.5-pro    (slower but more capable)
-GEMINI_MODEL=gemini-2.0-flash
+# Model selection - Gemini 2.5 Flash recommended
+GEMINI_MODEL=gemini-2.5-flash
 
 BIAS_ANALYSIS_ENABLED=true
 
-# Optional - enhances plagiarism detection with IEEE papers
+# Optional - enhances plagiarism detection
 IEEE_API_KEY=your_ieee_api_key_here
 ```
 
-### Switching Gemini Models
+**Available Gemini Models:**
+| Model | Speed | Capability | Recommended For |
+|-------|-------|------------|-----------------|
+| `gemini-2.5-flash` | Fastest | High | Default choice |
+| `gemini-2.0-flash` | Fast | High | Stable alternative |
+| `gemini-1.5-pro` | Slower | Highest | Complex analysis |
 
-To use a different Gemini model, simply change the `GEMINI_MODEL` value in your `.env` file:
-
-```env
-# For the latest Gemini 2.5 Flash (recommended):
-GEMINI_MODEL=gemini-2.5-flash
-
-# For Gemini 2.0 Flash:
-GEMINI_MODEL=gemini-2.0-flash
-
-# For Gemini 1.5 Pro (more capable, slower):
-GEMINI_MODEL=gemini-1.5-pro
-```
-
-**Get API Keys:**
+**Get API Keys (Free):**
 - Gemini API: https://aistudio.google.com/app/apikey
 - IEEE Xplore API: https://developer.ieee.org/
 
@@ -224,41 +254,59 @@ Health check endpoint.
 
 ---
 
-## Troubleshooting
+## Comparison with Industry Leaders
 
-### Bias Analysis Shows "Unavailable"
+### vs Turnitin
+| Feature | Turnitin | This Tool |
+|---------|----------|-----------|
+| Price | $10,000+/institution | Free |
+| Individual Access | No | Yes |
+| Bias Detection | No | Yes |
+| Self-Hosted | No | Yes |
+| Open Source | No | Yes |
+| AI Suggestions | No | Yes |
 
-**Rate Limit Error**: The Gemini API free tier has daily limits. Either:
-- Wait for quota reset (resets daily)
-- Upgrade to paid plan at [Google AI Studio](https://aistudio.google.com/)
-- Use a different API key
+### vs iThenticate
+| Feature | iThenticate | This Tool |
+|---------|-------------|-----------|
+| Price | $125/document | Free |
+| Bias Detection | No | Yes |
+| Real-time Analysis | No | Yes |
+| Section Analysis | No | Yes |
+| Improvement Tips | No | Yes |
 
-**API Key Error**: Ensure `GEMINI_API_KEY` is correctly set in `.env`
+### vs Grammarly
+| Feature | Grammarly | This Tool |
+|---------|-----------|-----------|
+| Academic Focus | Limited | Full |
+| Scholarly Databases | ProQuest only | IEEE, Semantic Scholar, OpenAlex |
+| Bias Detection | No | Yes |
+| Self-Hosted | No | Yes |
+| Research Integrity | Grammar focus | Plagiarism + Bias |
 
-### Port Already in Use
+---
 
-```bash
-# Kill process on port 8000
-kill -9 $(lsof -t -i:8000)
+## Use Cases
 
-# Or use a different port
-uvicorn api:app --reload --port 8001
-```
-
-### No IEEE Results
-
-- Verify `IEEE_API_KEY` is set in `.env`
-- IEEE search may not find matches for all topics
-- Semantic Scholar and OpenAlex provide fallback results
+- **Students**: Check papers before submission without institutional access
+- **Researchers**: Verify originality and identify potential bias before peer review
+- **Institutions**: Self-hosted solution with complete data privacy
+- **Journals**: Pre-screen submissions for integrity issues
 
 ---
 
 ## Notes & Limitations
 
 - Similarity scores are approximate signals for manual review, not legal plagiarism determinations
-- Bias analysis quality depends on Gemini AI availability and quota
-- Retrieval quality depends on public API availability
-- For scanned/image PDFs, OCR support is available but requires tesseract installed
+- Bias analysis quality depends on Gemini AI model and API availability
+- For scanned/image PDFs, OCR support requires tesseract installed on the system
+- IEEE Xplore results require a valid API key
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 

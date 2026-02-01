@@ -24,161 +24,323 @@ interface BiasAnalysisSectionProps {
   loading?: boolean
 }
 
-// Severity color mapping
-const severityColors = {
-  low: { bg: '#dcfce7', border: '#22c55e', text: '#166534', icon: '🟢' },
-  moderate: { bg: '#fef9c3', border: '#eab308', text: '#854d0e', icon: '🟡' },
-  high: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', icon: '🔴' }
+// Severity styling
+const severityConfig = {
+  low: { 
+    color: '#22c55e', 
+    bg: 'rgba(34, 197, 94, 0.1)', 
+    border: 'rgba(34, 197, 94, 0.3)',
+    icon: '✅',
+    label: 'Low Bias'
+  },
+  moderate: { 
+    color: '#f59e0b', 
+    bg: 'rgba(245, 158, 11, 0.1)', 
+    border: 'rgba(245, 158, 11, 0.3)',
+    icon: '⚠️',
+    label: 'Moderate Bias'
+  },
+  high: { 
+    color: '#ef4444', 
+    bg: 'rgba(239, 68, 68, 0.1)', 
+    border: 'rgba(239, 68, 68, 0.3)',
+    icon: '🚨',
+    label: 'High Bias'
+  }
 }
 
 // Bias type icons
-const biasIcons: Record<string, string> = {
-  'Confirmation Bias': '🎯',
-  'Selection Bias': '🎲',
-  'Publication Bias': '📰',
-  'Funding Bias': '💰',
-  'Citation Bias': '📚',
-  'Methodology Bias': '🔬',
-  'Unknown': '❓'
+const biasTypeConfig: Record<string, { icon: string; color: string }> = {
+  'Confirmation Bias': { icon: '🎯', color: '#f59e0b' },
+  'Selection Bias': { icon: '🎲', color: '#8b5cf6' },
+  'Publication Bias': { icon: '📰', color: '#3b82f6' },
+  'Funding Bias': { icon: '💰', color: '#22c55e' },
+  'Citation Bias': { icon: '📚', color: '#ec4899' },
+  'Methodology Bias': { icon: '🔬', color: '#06b6d4' },
+  'Unknown': { icon: '❓', color: '#64748b' }
 }
 
-const panel: React.CSSProperties = {
-  background: 'var(--panel)',
-  boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-  borderRadius: 8,
-  padding: 16,
-  border: '1px solid rgba(0,0,0,0.05)'
+const styles = {
+  card: {
+    background: 'var(--bg-card)',
+    borderRadius: 'var(--border-radius-lg)',
+    border: '1px solid var(--border-color)',
+    padding: 24,
+    marginBottom: 24,
+    animation: 'slideUp 0.5s ease-out',
+  } as React.CSSProperties,
+
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  } as React.CSSProperties,
+
+  title: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  } as React.CSSProperties,
+
+  scoreContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 24,
+    padding: 24,
+    background: 'var(--bg-secondary)',
+    borderRadius: 'var(--border-radius)',
+    marginBottom: 24,
+  } as React.CSSProperties,
+
+  scoreCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column' as const,
+    position: 'relative' as const,
+  } as React.CSSProperties,
+
+  scoreRing: {
+    position: 'absolute' as const,
+    inset: 0,
+    borderRadius: '50%',
+    border: '6px solid var(--bg-tertiary)',
+  } as React.CSSProperties,
+
+  biasCard: {
+    background: 'var(--bg-secondary)',
+    borderRadius: 'var(--border-radius)',
+    marginBottom: 12,
+    overflow: 'hidden',
+    border: '1px solid var(--border-color)',
+    transition: 'all 0.2s ease',
+  } as React.CSSProperties,
+
+  biasHeader: {
+    padding: '16px 20px',
+    cursor: 'pointer',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    transition: 'background 0.2s ease',
+  } as React.CSSProperties,
+
+  biasContent: {
+    padding: '0 20px 20px',
+    borderTop: '1px solid var(--border-color)',
+  } as React.CSSProperties,
+
+  excerpt: {
+    background: 'var(--bg-tertiary)',
+    padding: '12px 16px',
+    borderRadius: 8,
+    fontStyle: 'italic',
+    borderLeft: '3px solid',
+    marginBottom: 16,
+    fontSize: 14,
+  } as React.CSSProperties,
+
+  suggestion: {
+    background: 'rgba(59, 130, 246, 0.1)',
+    border: '1px solid rgba(59, 130, 246, 0.3)',
+    padding: '12px 16px',
+    borderRadius: 8,
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 12,
+  } as React.CSSProperties,
+
+  strengthsList: {
+    background: 'var(--bg-secondary)',
+    borderRadius: 'var(--border-radius)',
+    padding: 20,
+    marginTop: 24,
+  } as React.CSSProperties,
+
+  badge: {
+    padding: '4px 10px',
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  } as React.CSSProperties,
+
+  shimmer: {
+    background: 'linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 1.5s infinite',
+    borderRadius: 8,
+  } as React.CSSProperties,
 }
 
-function ScoreGauge({ score }: { score: number }) {
-  // Score is 0-100 where lower is better (less biased)
-  const getSeverity = (s: number): 'low' | 'moderate' | 'high' => {
-    if (s <= 25) return 'low'
-    if (s <= 50) return 'moderate'
-    return 'high'
-  }
-  
-  const severity = getSeverity(score)
-  const colors = severityColors[severity]
-  
+function ScoreGauge({ score, severity }: { score: number; severity: 'low' | 'moderate' | 'high' }) {
+  const config = severityConfig[severity]
+  const circumference = 2 * Math.PI * 44 // radius = 44
+  const strokeDashoffset = circumference - (score / 100) * circumference
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <div style={{
-        width: 80,
-        height: 80,
-        borderRadius: '50%',
-        border: `4px solid ${colors.border}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: colors.bg
-      }}>
-        <span style={{ fontSize: 24, fontWeight: 700, color: colors.text }}>
+    <div style={styles.scoreContainer}>
+      <div style={styles.scoreCircle}>
+        <svg width="100" height="100" style={{ position: 'absolute', transform: 'rotate(-90deg)' }}>
+          <circle
+            cx="50"
+            cy="50"
+            r="44"
+            fill="none"
+            stroke="var(--bg-tertiary)"
+            strokeWidth="8"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="44"
+            fill="none"
+            stroke={config.color}
+            strokeWidth="8"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 1s ease' }}
+          />
+        </svg>
+        <span style={{ fontSize: 28, fontWeight: 700, color: config.color, zIndex: 1 }}>
           {score}
         </span>
       </div>
-      <div>
-        <div style={{ fontWeight: 600, fontSize: 18 }}>Bias Score</div>
+      
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Bias Score</div>
         <div style={{ 
-          color: colors.text, 
-          background: colors.bg, 
-          padding: '2px 8px', 
-          borderRadius: 4,
-          display: 'inline-block',
-          marginTop: 4
+          ...styles.badge, 
+          background: config.bg, 
+          color: config.color,
+          border: `1px solid ${config.border}`,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6
         }}>
-          {severity.charAt(0).toUpperCase() + severity.slice(1)} Bias Level
+          <span>{config.icon}</span>
+          {config.label}
+        </div>
+        <div style={{ 
+          color: 'var(--text-secondary)', 
+          fontSize: 13, 
+          marginTop: 8,
+          lineHeight: 1.5
+        }}>
+          {score <= 25 && 'Excellent objectivity. The paper follows best practices.'}
+          {score > 25 && score <= 50 && 'Some concerns detected. Review the flagged items below.'}
+          {score > 50 && 'Significant bias detected. Careful review recommended.'}
         </div>
       </div>
     </div>
   )
 }
 
-function BiasCard({ bias, isExpanded, onToggle }: { 
+function BiasCard({ 
+  bias, 
+  isExpanded, 
+  onToggle 
+}: { 
   bias: BiasInstance
   isExpanded: boolean
   onToggle: () => void 
 }) {
-  const colors = severityColors[bias.severity]
-  const icon = biasIcons[bias.type] || biasIcons['Unknown']
-  
+  const severityStyle = severityConfig[bias.severity]
+  const typeConfig = biasTypeConfig[bias.type] || biasTypeConfig['Unknown']
+
   return (
     <div style={{
-      border: `1px solid ${colors.border}`,
-      borderRadius: 8,
-      marginBottom: 12,
-      overflow: 'hidden',
-      background: '#fff'
+      ...styles.biasCard,
+      borderColor: isExpanded ? severityStyle.color : 'var(--border-color)'
     }}>
       <div 
-        onClick={onToggle}
         style={{
-          padding: '12px 16px',
-          background: colors.bg,
-          cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+          ...styles.biasHeader,
+          background: isExpanded ? severityStyle.bg : 'transparent'
         }}
+        onClick={onToggle}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 20 }}>{icon}</span>
-          <span style={{ fontWeight: 600 }}>{bias.type}</span>
-          <span style={{
-            background: colors.border,
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: 12,
-            fontSize: 12,
-            fontWeight: 500
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ 
+            fontSize: 24, 
+            width: 40, 
+            height: 40, 
+            background: 'var(--bg-tertiary)',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            {bias.severity}
+            {typeConfig.icon}
           </span>
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>{bias.type}</div>
+            <span style={{ 
+              ...styles.badge, 
+              background: severityStyle.bg, 
+              color: severityStyle.color,
+              border: `1px solid ${severityStyle.border}`
+            }}>
+              {bias.severity}
+            </span>
+          </div>
         </div>
         <span style={{ 
+          fontSize: 16, 
+          color: 'var(--text-muted)',
           transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-          transition: 'transform 0.2s'
+          transition: 'transform 0.2s ease'
         }}>
           ▼
         </span>
       </div>
       
       {isExpanded && (
-        <div style={{ padding: 16 }}>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4, color: '#666' }}>
-              Excerpt:
-            </div>
-            <div style={{
-              background: '#f5f5f5',
-              padding: '8px 12px',
-              borderRadius: 4,
-              fontStyle: 'italic',
-              borderLeft: `3px solid ${colors.border}`
+        <div style={styles.biasContent}>
+          <div style={{ paddingTop: 16 }}>
+            <div style={{ 
+              color: 'var(--text-secondary)', 
+              fontSize: 12, 
+              fontWeight: 600, 
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginBottom: 8 
             }}>
+              Problematic Excerpt
+            </div>
+            <div style={{ ...styles.excerpt, borderLeftColor: severityStyle.color }}>
               "{bias.excerpt}"
             </div>
-          </div>
-          
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4, color: '#666' }}>
-              Why it's biased:
+            
+            <div style={{ 
+              color: 'var(--text-secondary)', 
+              fontSize: 12, 
+              fontWeight: 600, 
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              marginBottom: 8 
+            }}>
+              Why It's Biased
             </div>
-            <div>{bias.explanation}</div>
-          </div>
-          
-          <div style={{
-            background: '#e0f2fe',
-            padding: '8px 12px',
-            borderRadius: 4,
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 8
-          }}>
-            <span style={{ fontSize: 18 }}>💡</span>
-            <div>
-              <div style={{ fontWeight: 600, marginBottom: 2 }}>Suggestion:</div>
-              <div>{bias.suggestion}</div>
+            <p style={{ marginBottom: 16, lineHeight: 1.6 }}>{bias.explanation}</p>
+            
+            <div style={styles.suggestion}>
+              <span style={{ fontSize: 20 }}>💡</span>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--accent-primary)' }}>
+                  Suggestion
+                </div>
+                <div style={{ lineHeight: 1.6 }}>{bias.suggestion}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -189,58 +351,38 @@ function BiasCard({ bias, isExpanded, onToggle }: {
 
 function LoadingSkeleton() {
   return (
-    <div style={{ ...panel, marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{
-          width: 80,
-          height: 80,
-          borderRadius: '50%',
-          background: 'linear-gradient(90deg, #e5e1d5 25%, #f0ede5 50%, #e5e1d5 75%)',
-          backgroundSize: '200% 100%',
-          animation: 'shimmer 1.5s infinite'
-        }} />
-        <div>
-          <div style={{
-            width: 100,
-            height: 20,
-            borderRadius: 4,
-            background: '#e5e1d5',
-            marginBottom: 8
-          }} />
-          <div style={{
-            width: 150,
-            height: 16,
-            borderRadius: 4,
-            background: '#e5e1d5'
-          }} />
+    <div style={styles.card}>
+      <div style={styles.header}>
+        <span style={{ fontSize: 24 }}>🤖</span>
+        <h2 style={styles.title}>AI Bias Analysis</h2>
+      </div>
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 24 }}>
+        <div style={{ ...styles.shimmer, width: 100, height: 100, borderRadius: '50%' }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ ...styles.shimmer, height: 24, width: '40%', marginBottom: 12 }} />
+          <div style={{ ...styles.shimmer, height: 16, width: '60%' }} />
         </div>
       </div>
+      
       <div style={{ 
         display: 'flex', 
         alignItems: 'center', 
-        gap: 8,
-        color: 'var(--accent)'
+        gap: 12,
+        color: 'var(--accent-primary)',
+        justifyContent: 'center',
+        padding: 24
       }}>
-        <div className="spinner" style={{
-          width: 20,
-          height: 20,
-          border: '2px solid var(--accent)',
+        <div style={{
+          width: 24,
+          height: 24,
+          border: '2px solid var(--accent-primary)',
           borderTopColor: 'transparent',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }} />
-        <span>Analyzing with AI...</span>
+        <span>Analyzing for bias...</span>
       </div>
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }
@@ -257,17 +399,36 @@ export default function BiasAnalysisSection({ data, loading }: BiasAnalysisSecti
     return null
   }
   
-  if (data.error && !data.biases.length) {
+  // Handle error state
+  if (data.error && !data.biases?.length) {
+    // Determine user-friendly error message
+    let errorMessage = 'Unable to perform bias analysis at this time.'
+    let errorIcon = '⚠️'
+    
+    if (data.error === 'Bias analysis disabled - no API key') {
+      errorMessage = 'Please configure GEMINI_API_KEY in the backend .env file.'
+    } else if (data.error.includes('429') || data.error.includes('quota') || data.error.includes('rate')) {
+      errorMessage = 'AI service is temporarily unavailable due to rate limits. Please try again in a few minutes.'
+      errorIcon = '⏳'
+    } else if (data.error.includes('API') || data.error.includes('key')) {
+      errorMessage = 'API configuration issue. Please check your API key settings.'
+    }
+    
     return (
-      <div style={{ ...panel, marginBottom: 16, borderColor: '#fbbf24' }}>
-        <h2 style={{ margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          ⚠️ Bias Analysis Unavailable
-        </h2>
-        <p style={{ margin: 0, color: '#666' }}>
-          {data.error === 'Bias analysis disabled - no API key' 
-            ? 'Bias analysis requires a Gemini API key. Please configure GEMINI_API_KEY in the backend.'
-            : data.summary || 'Unable to perform bias analysis at this time.'}
-        </p>
+      <div style={{ 
+        ...styles.card, 
+        borderColor: 'var(--warning)',
+        background: 'rgba(245, 158, 11, 0.05)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ fontSize: 40 }}>{errorIcon}</span>
+          <div>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: 18 }}>Bias Analysis Unavailable</h3>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {errorMessage}
+            </p>
+          </div>
+        </div>
       </div>
     )
   }
@@ -282,36 +443,51 @@ export default function BiasAnalysisSection({ data, loading }: BiasAnalysisSecti
     setExpandedBiases(newExpanded)
   }
   
+  const severity = data.severity || (data.overall_score <= 25 ? 'low' : data.overall_score <= 50 ? 'moderate' : 'high')
+  
   return (
-    <div style={{ ...panel, marginBottom: 16 }}>
-      <h2 style={{ margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-        📊 AI Bias Analysis
-      </h2>
+    <div style={styles.card}>
+      <div style={styles.header}>
+        <span style={{ fontSize: 24 }}>🤖</span>
+        <h2 style={styles.title}>AI Bias Analysis</h2>
+      </div>
       
-      {/* Score and Summary */}
+      {/* Score Display */}
+      <ScoreGauge score={data.overall_score} severity={severity} />
+      
+      {/* Summary */}
       <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: 16,
-        marginBottom: 20,
-        paddingBottom: 20,
-        borderBottom: '1px solid rgba(0,0,0,0.1)'
+        background: 'var(--bg-secondary)', 
+        padding: 16, 
+        borderRadius: 'var(--border-radius)',
+        marginBottom: 24,
+        borderLeft: '3px solid var(--accent-primary)'
       }}>
-        <ScoreGauge score={data.overall_score} />
         <div style={{ 
-          background: '#f8f7f4', 
-          padding: 12, 
-          borderRadius: 6,
-          lineHeight: 1.5
+          color: 'var(--text-secondary)', 
+          fontSize: 12, 
+          fontWeight: 600, 
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          marginBottom: 8 
         }}>
-          {data.summary}
+          Summary
         </div>
+        <p style={{ margin: 0, lineHeight: 1.6 }}>{data.summary}</p>
       </div>
       
       {/* Detected Biases */}
-      {data.biases.length > 0 ? (
-        <div style={{ marginBottom: 20 }}>
-          <h3 style={{ margin: '0 0 12px 0' }}>
+      {data.biases && data.biases.length > 0 ? (
+        <div style={{ marginBottom: 24 }}>
+          <h3 style={{ 
+            fontSize: 16, 
+            fontWeight: 600, 
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            <span>🔍</span>
             Detected Biases ({data.biases.length})
           </h3>
           {data.biases.map((bias, index) => (
@@ -325,45 +501,51 @@ export default function BiasAnalysisSection({ data, loading }: BiasAnalysisSecti
         </div>
       ) : (
         <div style={{ 
-          background: severityColors.low.bg, 
-          padding: 16, 
-          borderRadius: 8,
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12
+          background: severityConfig.low.bg, 
+          border: `1px solid ${severityConfig.low.border}`,
+          padding: 24, 
+          borderRadius: 'var(--border-radius)',
+          marginBottom: 24,
+          textAlign: 'center'
         }}>
-          <span style={{ fontSize: 32 }}>✅</span>
-          <div>
-            <div style={{ fontWeight: 600, color: severityColors.low.text }}>
-              No Significant Biases Detected
-            </div>
-            <div style={{ color: '#666' }}>
-              The paper appears to follow good practices for objectivity.
-            </div>
+          <span style={{ fontSize: 48, display: 'block', marginBottom: 12 }}>✨</span>
+          <div style={{ fontWeight: 600, color: severityConfig.low.color, marginBottom: 4 }}>
+            No Significant Biases Detected
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+            The paper appears to follow good practices for objectivity and balanced reporting.
           </div>
         </div>
       )}
       
       {/* Strengths */}
-      {data.strengths.length > 0 && (
-        <div>
+      {data.strengths && data.strengths.length > 0 && (
+        <div style={styles.strengthsList}>
           <div 
-            onClick={() => setShowStrengths(!showStrengths)}
             style={{ 
-              cursor: 'pointer',
-              display: 'flex',
-              justifyContent: 'space-between',
+              display: 'flex', 
+              justifyContent: 'space-between', 
               alignItems: 'center',
-              padding: '8px 0'
+              cursor: 'pointer'
             }}
+            onClick={() => setShowStrengths(!showStrengths)}
           >
-            <h3 style={{ margin: 0, color: severityColors.low.text }}>
-              ✅ Strengths ({data.strengths.length})
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: 16, 
+              fontWeight: 600,
+              color: severityConfig.low.color,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              <span>✅</span>
+              Identified Strengths ({data.strengths.length})
             </h3>
             <span style={{ 
+              color: 'var(--text-muted)',
               transform: showStrengths ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s'
+              transition: 'transform 0.2s ease'
             }}>
               ▼
             </span>
@@ -371,15 +553,19 @@ export default function BiasAnalysisSection({ data, loading }: BiasAnalysisSecti
           
           {showStrengths && (
             <ul style={{ 
-              margin: '8px 0 0 0', 
+              margin: '16px 0 0 0', 
               paddingLeft: 24,
-              background: severityColors.low.bg,
-              padding: '12px 12px 12px 32px',
-              borderRadius: 8
+              listStyle: 'none'
             }}>
               {data.strengths.map((strength, index) => (
-                <li key={index} style={{ marginBottom: 4, color: severityColors.low.text }}>
-                  {strength}
+                <li key={index} style={{ 
+                  marginBottom: 8, 
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8
+                }}>
+                  <span style={{ color: severityConfig.low.color }}>•</span>
+                  <span>{strength}</span>
                 </li>
               ))}
             </ul>

@@ -1,44 +1,85 @@
+# Research Paper Analyzer
 
+A comprehensive web tool for analyzing academic papers for plagiarism and bias detection.
 
 ## Project Overview
 
-Research Paper Plagiarism & Similarity Analysis is a web tool that reads an academic paper (PDF), extracts the main sections — Title, Abstract, Methodology, and Conclusions — and evaluates how similar each section is to related, previously published work. Results are shown as section‑wise similarity percentages with categorized levels and direct links to the closest matching sources.
+Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), extracts main sections — Title, Abstract, Methodology, and Conclusions — and provides:
 
-### What it does
-- Extracts text from uploaded PDFs (with robust fallbacks for tricky layouts)
+1. **Plagiarism Detection**: Evaluates similarity against published academic work
+2. **AI Bias Analysis**: Detects various types of academic bias using Google's Gemini AI
+
+## Features
+
+### Plagiarism Detection
+- Extracts text from uploaded PDFs (with robust fallbacks using PyMuPDF, pdfminer, and OCR)
 - Splits content into four sections: Title, Abstract, Methodology, Conclusions
-- Finds potentially similar papers using public scholarly APIs (Semantic Scholar and OpenAlex)
-- Computes TF‑IDF cosine similarity to estimate overlap
+- Searches multiple academic databases:
+  - **IEEE Xplore** (requires API key)
+  - **Semantic Scholar**
+  - **OpenAlex**
+- Computes TF-IDF cosine similarity to estimate overlap
 - Classifies similarity levels:
-  - 1–25%: Low similarity (mostly original ideas)
+  - 0–25%: Low similarity (mostly original)
   - 25–50%: Moderate similarity
-  - >50%: High similarity (heavily copied)
-- Displays top matching sources with links for each section
+  - >50%: High similarity (review recommended)
+- Displays top matching sources with direct links
 
-### How it works (pipeline)
-1) PDF ingestion: `pdfplumber` extracts text; if spacing is broken, the app reconstructs text from word boxes.
-2) Sectioning: simple, robust regex heuristics isolate Title/Abstract/Methodology/Conclusions.
-3) Retrieval: builds multiple concise queries per section and calls Semantic Scholar and OpenAlex; results are de‑duplicated.
-4) Scoring: TF‑IDF vectorization and cosine similarity produce a percent score per match; the best score per section drives the displayed category.
-5) Reporting: overall similarity is a weighted average favoring Abstract and Methodology; the UI renders per‑section tables with match percentage, title, and link.
+### AI Bias Analysis
+Powered by Google's Gemini AI, detects:
+- **Confirmation Bias**: Language assuming conclusions before evidence
+- **Selection Bias**: Non-representative sampling indicators
+- **Publication Bias**: Overly positive framing, suppressed negative results
+- **Funding Bias**: Undisclosed conflicts of interest
+- **Citation Bias**: Selective citing supporting predetermined views
+- **Methodology Bias**: Flawed experimental design
 
-### Tech stack
-- Backend: Python, FastAPI, pdfplumber, scikit‑learn, requests
-- Frontend: React (Vite), Axios
+Provides:
+- Overall bias score (0-100)
+- Detailed explanations for each detected bias
+- Actionable suggestions for improvement
+- Identified strengths in the paper
+
+## Tech Stack
+
+### Backend
+- Python 3.9+
+- FastAPI
+- Google Generative AI (Gemini)
+- PDF Processing: PyMuPDF, pdfplumber, pdfminer.six, pytesseract
+- ML: scikit-learn, numpy, scipy
+
+### Frontend
+- React 18 (Vite)
+- TypeScript
+- Axios
+- Modern dark theme UI
 
 ---
 
 ## Repository Layout
+
 ```
 backend/
-  api.py                 # FastAPI server, exposes POST /analyze
-  requirements.txt       # Backend dependencies
+  api.py                     # FastAPI server, POST /analyze endpoint
+  requirements.txt           # Python dependencies
+  .env                       # Environment variables (API keys)
+  .env.example               # Environment template
   src/
-    plagiarism_checker.py  # Section extraction, retrieval, similarity, reporting
+    gemini_bias_analyzer.py  # Gemini AI bias detection
+    plagiarism_checker.py    # Section extraction, similarity analysis
+    text_extraction.py       # PDF text extraction (multi-method)
+    integrations/
+      ieee_explore.py        # IEEE Xplore API integration
+
 web/
-  index.html            # Paper texture theme
-  src/ui/App.tsx        # React UI
-  vite.config.ts        # Dev server proxy to backend
+  index.html                 # HTML entry point
+  src/
+    main.tsx                 # React entry
+    ui/
+      App.tsx                # Main application UI
+      BiasAnalysisSection.tsx # Bias analysis results component
+  vite.config.ts             # Vite configuration
 ```
 
 ---
@@ -46,47 +87,181 @@ web/
 ## Requirements
 
 ### Backend
-- Python 3.10+
-- Packages (installed via `backend/requirements.txt`):
-  - fastapi, uvicorn, pdfplumber, numpy, scikit‑learn, requests, scipy
+- Python 3.9+
+- Gemini API key (for bias analysis)
+- IEEE Xplore API key (optional, for enhanced plagiarism detection)
 
 ### Frontend
-- Node.js 18+ and npm (or pnpm/yarn)
+- Node.js 18+
+- npm, pnpm, or yarn
 
 ---
 
 ## Setup & Run
 
-1) Clone and open this repository.
+### 1. Clone the Repository
 
-2) Start the backend API
+```bash
+git clone https://github.com/rk0802p/paper_bias_detection.git
+cd paper_bias_detection
+```
+
+### 2. Configure Environment Variables
+
+Copy the example environment file and add your API keys:
+
 ```bash
 cd backend
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
+cp .env.example .env
+```
 
+Edit `.env` with your keys:
+
+```env
+# Required for bias analysis
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Model selection - choose one:
+#   gemini-2.5-flash  (recommended - latest and fastest)
+#   gemini-2.0-flash  (stable)
+#   gemini-1.5-flash  (legacy)
+#   gemini-1.5-pro    (slower but more capable)
+GEMINI_MODEL=gemini-2.0-flash
+
+BIAS_ANALYSIS_ENABLED=true
+
+# Optional - enhances plagiarism detection with IEEE papers
+IEEE_API_KEY=your_ieee_api_key_here
+```
+
+### Switching Gemini Models
+
+To use a different Gemini model, simply change the `GEMINI_MODEL` value in your `.env` file:
+
+```env
+# For the latest Gemini 2.5 Flash (recommended):
+GEMINI_MODEL=gemini-2.5-flash
+
+# For Gemini 2.0 Flash:
+GEMINI_MODEL=gemini-2.0-flash
+
+# For Gemini 1.5 Pro (more capable, slower):
+GEMINI_MODEL=gemini-1.5-pro
+```
+
+**Get API Keys:**
+- Gemini API: https://aistudio.google.com/app/apikey
+- IEEE Xplore API: https://developer.ieee.org/
+
+### 3. Start the Backend
+
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate (macOS/Linux)
+source .venv/bin/activate
+# Activate (Windows)
+.venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Start server
 uvicorn api:app --reload --port 8000
 ```
-The API will be available at `http://localhost:8000`.
 
-3) Start the frontend
+The API will be available at `http://localhost:8000`
+
+### 4. Start the Frontend
+
 ```bash
 cd web
 npm install
 npm run dev
-# open http://localhost:5173
-```
-The frontend proxies API calls to `http://localhost:8000` (configured in `vite.config.ts`). To override, create `web/.env`:
-```
-VITE_API_BASE=http://localhost:8000
 ```
 
+Open `http://localhost:5173` in your browser.
+
+---
+
+## API Endpoints
+
+### POST /analyze
+Upload a PDF file for analysis.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: `file` (PDF file)
+
+**Response:**
+```json
+{
+  "plagiarism": {
+    "overall_percent": 14.9,
+    "overall_category": "Low similarity",
+    "sections": {
+      "Title": { "best_similarity_percent": 0, "matches": [] },
+      "Abstract": { "best_similarity_percent": 32.9, "matches": [...] },
+      "Methodology": { "best_similarity_percent": 0, "matches": [] },
+      "Conclusions": { "best_similarity_percent": 2.0, "matches": [...] }
+    }
+  },
+  "bias_analysis": {
+    "overall_score": 25,
+    "severity": "low",
+    "summary": "...",
+    "biases": [...],
+    "strengths": [...]
+  }
+}
+```
+
+### GET /health
+Health check endpoint.
+
+---
+
+## Troubleshooting
+
+### Bias Analysis Shows "Unavailable"
+
+**Rate Limit Error**: The Gemini API free tier has daily limits. Either:
+- Wait for quota reset (resets daily)
+- Upgrade to paid plan at [Google AI Studio](https://aistudio.google.com/)
+- Use a different API key
+
+**API Key Error**: Ensure `GEMINI_API_KEY` is correctly set in `.env`
+
+### Port Already in Use
+
+```bash
+# Kill process on port 8000
+kill -9 $(lsof -t -i:8000)
+
+# Or use a different port
+uvicorn api:app --reload --port 8001
+```
+
+### No IEEE Results
+
+- Verify `IEEE_API_KEY` is set in `.env`
+- IEEE search may not find matches for all topics
+- Semantic Scholar and OpenAlex provide fallback results
+
+---
 
 ## Notes & Limitations
-- Similarity is an approximate signal intended to aid manual review; it is not a legal plagiarism determination.
-- Retrieval quality depends on the public APIs; network availability may affect results.
-- For image‑only PDFs, OCR is not currently enabled; add OCR if needed.
+
+- Similarity scores are approximate signals for manual review, not legal plagiarism determinations
+- Bias analysis quality depends on Gemini AI availability and quota
+- Retrieval quality depends on public API availability
+- For scanned/image PDFs, OCR support is available but requires tesseract installed
+
+---
+
+## License
+
+MIT License

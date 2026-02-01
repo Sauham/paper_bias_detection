@@ -2,6 +2,7 @@ import re
 import time
 import os
 import json
+import logging
 import requests
 from typing import Dict, List, Tuple
 
@@ -10,21 +11,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from src.integrations.ieee_explore import ieee_search
-from openai import OpenAI
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # -------------------- CONFIG -------------------- #
 
 SEMANTIC_SCHOLAR_SEARCH = "https://api.semanticscholar.org/graph/v1/paper/search"
 OPENALEX_SEARCH = "https://api.openalex.org/works"
 
+# Similarity thresholds
 IEEE_THRESHOLD = 12.0
 SS_THRESHOLD = 10.0
 OPENALEX_THRESHOLD = 6.0
-
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
 # -------------------- UTILS -------------------- #
@@ -153,6 +153,7 @@ def _semantic_scholar_search(query: str, max_results: int) -> List[Dict]:
 
 
 def _openalex_search(query: str, max_results: int) -> List[Dict]:
+    """Search OpenAlex for academic papers."""
     try:
         resp = requests.get(
             OPENALEX_SEARCH,
@@ -171,51 +172,9 @@ def _openalex_search(query: str, max_results: int) -> List[Dict]:
             "url": r.get("id", ""),
             "source": "OpenAlex"
         } for r in data.get("results", [])]
-    except Exception:
+    except Exception as e:
+        logger.warning(f"OpenAlex search failed: {e}")
         return []
-
-
-def _openai_web_fallback(text: str) -> List[Dict]:
-    if not openai_client:
-        return []
-
-    prompt = f"""
-You are a plagiarism detection assistant.
-Check whether the following academic text likely appears on the public web.
-If yes, identify a probable source (title or website).
-
-Respond ONLY in JSON:
-{{
-  "found": true/false,
-  "source_title": "",
-  "source_url": ""
-}}
-
-Text:
-\"\"\"{text[:1000]}\"\"\"
-"""
-
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=120
-        )
-        content = response.choices[0].message.content.strip()
-        data = json.loads(content)
-
-        if data.get("found"):
-            return [{
-                "title": data.get("source_title", ""),
-                "abstract": "",
-                "url": data.get("source_url", ""),
-                "source": "OpenAI-Web"
-            }]
-    except Exception:
-        return []
-
-    return []
 
 
 # -------------------- CORE ANALYSIS -------------------- #
@@ -228,16 +187,40 @@ def build_search_query(text: str) -> str:
     return " ".join(words[:12])
 
 
-def search_related_papers(section_text: str, max_results: int = 10):
+def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict]:
+    """
+    Search multiple academic databases for related papers.
+    Combines results from IEEE Xplore, Semantic Scholar, and OpenAlex.
+    """
     query = build_search_query(section_text)
     if not query:
         return []
 
     results = []
+    seen_titles = set()  # Deduplicate by title
 
+    # 1. IEEE Xplore Search (if API key configured)
+    try:
+        logger.info("Searching IEEE Xplore...")
+        ieee_results = ieee_search(section_text, max_results=max_results)
+        logger.info(f"IEEE returned {len(ieee_results)} results")
+        for item in ieee_results:
+            title = item.get("title", "").lower().strip()
+            if title and title not in seen_titles:
+                seen_titles.add(title)
+                results.append({
+                    "title": item.get("title", ""),
+                    "abstract": item.get("abstract", ""),
+                    "url": item.get("url", ""),
+                    "source": "IEEE"
+                })
+    except Exception as e:
+        logger.warning(f"IEEE search failed: {e}")
+
+    # 2. Semantic Scholar Search
     try:
         resp = requests.get(
-            "https://api.semanticscholar.org/graph/v1/paper/search",
+            SEMANTIC_SCHOLAR_SEARCH,
             params={
                 "query": query,
                 "limit": max_results,
@@ -248,14 +231,30 @@ def search_related_papers(section_text: str, max_results: int = 10):
         if resp.status_code == 200:
             data = resp.json()
             for item in data.get("data", []):
-                results.append({
-                    "title": item.get("title", ""),
-                    "abstract": item.get("abstract", ""),
-                    "url": item.get("url", "")
-                })
+                title = item.get("title", "").lower().strip()
+                if title and title not in seen_titles:
+                    seen_titles.add(title)
+                    results.append({
+                        "title": item.get("title", ""),
+                        "abstract": item.get("abstract", ""),
+                        "url": item.get("url", ""),
+                        "source": "SemanticScholar"
+                    })
     except Exception as e:
-        print("Semantic Scholar error:", e)
+        logger.warning(f"Semantic Scholar search failed: {e}")
 
+    # 3. OpenAlex Search
+    try:
+        openalex_results = _openalex_search(query, max_results // 2)
+        for item in openalex_results:
+            title = item.get("title", "").lower().strip()
+            if title and title not in seen_titles:
+                seen_titles.add(title)
+                results.append(item)
+    except Exception as e:
+        logger.warning(f"OpenAlex search failed: {e}")
+
+    logger.info(f"Found {len(results)} unique papers from all sources")
     return results
 
 def analyze_section(section_text: str, top_k: int = 5):

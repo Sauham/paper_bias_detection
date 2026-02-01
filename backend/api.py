@@ -8,7 +8,7 @@ import tempfile
 import os
 from dotenv import load_dotenv
 
-from src.openai_bias_analyzer import OpenAIBiasAnalyzer
+from src.gemini_bias_analyzer import GeminiBiasAnalyzer, result_to_dict
 from src.plagiarism_checker import analyze_plagiarism, extract_sections
 from src.text_extraction import extract_text_robust
 
@@ -21,8 +21,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-bias_analyzer = OpenAIBiasAnalyzer()
-logger.info(f"Bias enabled: {bias_analyzer.enabled}")
+bias_analyzer = GeminiBiasAnalyzer()
+logger.info(f"Bias analysis enabled: {bias_analyzer.enabled}")
 
 app = FastAPI(title="Paper Similarity & Bias Detection API")
 
@@ -80,21 +80,19 @@ async def analyze(file: UploadFile = File(...)):
         # 3️⃣ Plagiarism analysis
         plagiarism_report = analyze_plagiarism(full_text)
 
-        # 4️⃣ Bias analysis (OpenAI)
-        bias_result = bias_analyzer.analyze_sections(
-            extract_sections(full_text)
-        )
+        # 4️⃣ Bias analysis (Gemini)
+        sections = extract_sections(full_text)
+        bias_result = bias_analyzer.analyze_paper_sections(sections)
+        bias_dict = result_to_dict(bias_result)
 
-
-
-        # 🔴 EXACT OLD RESPONSE SHAPE (DO NOT CHANGE)
+        # Return response
         return {
             "plagiarism": {
                 "overall_percent": plagiarism_report.get("overall_percent", 0),
                 "overall_category": plagiarism_report.get("overall_category", ""),
                 "sections": plagiarism_report.get("sections", {})
             },
-            "bias_analysis": bias_result
+            "bias_analysis": bias_dict
         }
 
 

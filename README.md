@@ -2,6 +2,8 @@
 
 A comprehensive, open-source web tool for analyzing academic papers for plagiarism and bias detection.
 
+![Landing Page](assets/screenshot-landing.png)
+
 ## Why This Tool?
 
 ### The Problem with Existing Solutions
@@ -50,6 +52,9 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 2. **AI Bias Analysis**: Detects 6 types of academic bias using Google's Gemini AI with actionable improvement suggestions
 
 ## Screenshots
+
+### Landing Page - Upload Interface
+![Landing Page](assets/screenshot-landing.png)
 
 ### Plagiarism Analysis Results
 ![Plagiarism Results](assets/screenshot-plagiarism.png)

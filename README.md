@@ -53,8 +53,8 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 
 ## Screenshots
 
-### Landing Page - Upload Interface
-![Landing Page](assets/screenshot-landing.png)
+### After Uploading pdf
+![Landing Page](assets/Screenshot%20uploaded%20pdf.png)
 
 ### Plagiarism Analysis Results
 ![Plagiarism Results](assets/screenshot-plagiarism.png)

@@ -274,20 +274,20 @@ const styles = {
 
 // Helper functions
 const getSimilarityColor = (percent: number): string => {
-  if (percent <= 25) return 'var(--success)'
-  if (percent <= 50) return 'var(--warning)'
+  if (percent <= 10) return 'var(--success)'
+  if (percent <= 25) return 'var(--warning)'
   return 'var(--error)'
 }
 
 const getSimilarityBg = (percent: number): string => {
-  if (percent <= 25) return 'var(--success-bg)'
-  if (percent <= 50) return 'var(--warning-bg)'
+  if (percent <= 10) return 'var(--success-bg)'
+  if (percent <= 25) return 'var(--warning-bg)'
   return 'var(--error-bg)'
 }
 
 const getSimilarityLabel = (percent: number): string => {
-  if (percent <= 25) return 'Low'
-  if (percent <= 50) return 'Moderate'
+  if (percent <= 10) return 'Low'
+  if (percent <= 25) return 'Moderate'
   return 'High'
 }
 

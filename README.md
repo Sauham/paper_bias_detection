@@ -16,7 +16,7 @@ Academic plagiarism detection is dominated by expensive, proprietary tools that 
 | **iThenticate** | $125/document | No | No | Yes | No |
 | **Grammarly** | $12-30/month | No | No | Limited | No |
 | **Copyscape** | $0.03/search | No | No | No (web only) | No |
-| **This Tool** | **Free** | **Yes (AI-powered)** | **Yes** | **Yes (3 sources)** | **Yes** |
+| **This Tool** | **Free** | **Yes (AI-powered)** | **Yes** | **Yes (6 sources)** | **Yes** |
 
 ### What Existing Tools Are Missing
 
@@ -48,7 +48,7 @@ Traditional tools show similarity percentages without context. We provide:
 
 Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), extracts main sections, and provides:
 
-1. **Plagiarism Detection**: Evaluates similarity against published academic work from IEEE Xplore, Semantic Scholar, and OpenAlex
+1. **Plagiarism Detection**: Evaluates similarity against published academic work from **6 different sources** including CrossRef (130M+ works), arXiv (2M+ papers), OpenAlex (250M+ works), Semantic Scholar (200M+ papers), IEEE Xplore, and Gemini AI-powered search
 2. **AI Bias Analysis**: Detects 6 types of academic bias using Google's Gemini AI with actionable improvement suggestions
 
 ## Screenshots
@@ -68,17 +68,30 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 
 ### Plagiarism Detection
 - Extracts text from uploaded PDFs (with robust fallbacks using PyMuPDF, pdfminer, and OCR)
+- **Smart text normalization** to handle PDF extraction issues (concatenated words, missing spaces)
 - Splits content into four sections: Title, Abstract, Methodology, Conclusions
-- Searches multiple academic databases:
-  - **IEEE Xplore** (6M+ documents)
-  - **Semantic Scholar** (200M+ papers)
-  - **OpenAlex** (250M+ works)
+- Searches **6 academic databases** (all FREE, no API keys required for most):
+
+| Source | Database Size | API Key | Best For |
+|--------|---------------|---------|----------|
+| **CrossRef** | 130M+ works | Not required | All academic papers |
+| **arXiv** | 2M+ papers | Not required | CS, Physics, Math |
+| **OpenAlex** | 250M+ works | Not required | All disciplines |
+| **Semantic Scholar** | 200M+ papers | Not required | AI/ML papers |
+| **IEEE Xplore** | 6M+ documents | Optional | Engineering papers |
+| **Gemini AI** | Web search | Required | Fallback for rare topics |
+
 - Computes TF-IDF cosine similarity to estimate overlap
-- Classifies similarity levels:
-  - 0–25%: Low similarity (mostly original)
-  - 25–50%: Moderate similarity
-  - >50%: High similarity (review recommended)
+- **Similarity Classification:**
+
+| Similarity | Category | Color | Meaning |
+|------------|----------|-------|---------|
+| **0–10%** | Low | Green | Mostly original content |
+| **10–25%** | Moderate | Yellow | Some overlap detected |
+| **>25%** | High | Red | Review recommended |
+
 - Displays top matching sources with direct links
+- Automatic retry with exponential backoff for rate-limited APIs
 
 ### AI Bias Analysis
 Powered by Google's Gemini AI, detects:
@@ -155,8 +168,8 @@ assets/                      # Screenshots and images
 
 ### Backend
 - Python 3.9+
-- Gemini API key (free tier available)
-- IEEE Xplore API key (optional, enhances plagiarism detection)
+- Gemini API key (free tier available) - **Required for bias analysis**
+- IEEE Xplore API key (optional) - Most plagiarism detection works without any API keys!
 
 ### Frontend
 - Node.js 18+
@@ -304,7 +317,7 @@ Health check endpoint.
 | Feature | Grammarly | This Tool |
 |---------|-----------|-----------|
 | Academic Focus | Limited | Full |
-| Scholarly Databases | ProQuest only | IEEE, Semantic Scholar, OpenAlex |
+| Scholarly Databases | ProQuest only | 6 sources (CrossRef, arXiv, OpenAlex, Semantic Scholar, IEEE, Gemini) |
 | Bias Detection | No | Yes |
 | Self-Hosted | No | Yes |
 | Research Integrity | Grammar focus | Plagiarism + Bias |
@@ -325,7 +338,9 @@ Health check endpoint.
 - Similarity scores are approximate signals for manual review, not legal plagiarism determinations
 - Bias analysis quality depends on Gemini AI model and API availability
 - For scanned/image PDFs, OCR support requires tesseract installed on the system
-- IEEE Xplore results require a valid API key
+- Most plagiarism detection APIs (CrossRef, arXiv, OpenAlex, Semantic Scholar) work without API keys
+- IEEE Xplore requires a valid API key for enhanced results
+- Gemini API key is required for bias analysis and fallback paper search
 
 ---
 

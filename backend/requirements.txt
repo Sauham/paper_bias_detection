@@ -5,6 +5,11 @@ numpy
 scikit-learn
 requests
 scipy
-google-generativeai>=0.3.0
+google-genai>=1.0.0
 python-dotenv>=1.0.0
 python-multipart
+# PDF text extraction
+PyMuPDF>=1.23.0
+pdfminer.six>=20221105
+pdf2image>=1.16.0
+pytesseract>=0.3.10

@@ -2,8 +2,7 @@
 Gemini Bias Analyzer Module
 
 This module provides intelligent bias detection in academic papers using
-Google's Gemini API. It analyzes text for various types of biases and
-provides detailed explanations and suggestions for improvement.
+Google's Gemini API with the new google-genai SDK.
 """
 
 import os
@@ -14,8 +13,8 @@ import time
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google import genai
+from google.genai import types
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -151,35 +150,24 @@ If no biases are found, return an empty "biases" array with a low score and appr
         if not self.api_key:
             logger.warning("No Gemini API key provided. Bias analysis will be disabled.")
             self.enabled = False
+            self.client = None
             return
         
         self.enabled = os.getenv("BIAS_ANALYSIS_ENABLED", "true").lower() == "true"
         self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         
-        # Configure the API
-        genai.configure(api_key=self.api_key)
-        
-        # Initialize the model with safety settings
-        self.model = genai.GenerativeModel(
-            model_name=self.model_name,
-            generation_config={
-                "temperature": 0.3,  # Lower temperature for more consistent analysis
-                "top_p": 0.8,
-                "top_k": 40,
-                "max_output_tokens": 8192,  # Increased to avoid truncation
-            },
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-        )
+        # Initialize the new genai client
+        try:
+            self.client = genai.Client(api_key=self.api_key)
+            logger.info(f"GeminiBiasAnalyzer initialized with model: {self.model_name}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini client: {e}")
+            self.enabled = False
+            self.client = None
+            return
         
         # Initialize cache
         self._cache = BiasAnalysisCache(ttl_seconds=3600)
-        
-        logger.info(f"GeminiBiasAnalyzer initialized with model: {self.model_name}")
 
     def _build_prompt(self, text: str, section_name: Optional[str] = None) -> str:
         """Build the analysis prompt."""
@@ -248,7 +236,7 @@ If no biases are found, return an empty "biases" array with a low score and appr
         Returns:
             BiasAnalysisResult with detected biases and analysis
         """
-        if not self.enabled:
+        if not self.enabled or not self.client:
             return BiasAnalysisResult(
                 overall_score=0,
                 severity="low",
@@ -272,7 +260,18 @@ If no biases are found, return an empty "biases" array with a low score and appr
         
         try:
             prompt = self._build_prompt(text, section_name)
-            response = self.model.generate_content(prompt)
+            
+            # Use the new google-genai SDK
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    top_p=0.8,
+                    top_k=40,
+                    max_output_tokens=8192,
+                )
+            )
             
             if not response or not response.text:
                 logger.error("Empty response from Gemini API")
@@ -335,7 +334,7 @@ If no biases are found, return an empty "biases" array with a low score and appr
         Returns:
             Combined BiasAnalysisResult for the entire paper
         """
-        if not self.enabled:
+        if not self.enabled or not self.client:
             return BiasAnalysisResult(
                 overall_score=0,
                 severity="low",

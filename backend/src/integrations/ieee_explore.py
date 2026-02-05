@@ -25,10 +25,55 @@ def _get_ieee_api_key() -> Optional[str]:
     return os.getenv("IEEE_API_KEY")
 
 
+def _is_truncated_word(word: str) -> bool:
+    """Check if a word appears to be truncated from PDF extraction."""
+    if len(word) < 4:
+        return True
+    
+    word = word.lower()
+    
+    # Known truncated patterns from PDF extraction
+    truncated_patterns = {
+        'bstract', 'nalysis', 'pproach', 'lgorithm', 'udio', 'reas', 'uthenticity',
+        'ternational', 'terdisciplinary', 'troduction', 'vestigation', 'telligent',
+        'clusion', 'conclusi', 'ference', 'tribution', 'tection', 'detecti',
+        'velop', 'velopment', 'tector', 'sults', 'cognition', 'periment',
+        'thods', 'thodology', 'thod', 'iginality', 'iginal', 'ignal', 'ignals',
+        'ystem', 'ystems', 'ection', 'ections', 'pplication', 'fficient',
+        'valuate', 'valuation', 'roposed', 'resent', 'erformance', 'earning',
+        'dvanced', 'uthor', 'rticle', 'cademic', 'ccuracy', 'chieve',
+    }
+    
+    if word in truncated_patterns:
+        return True
+    
+    # Words ending in incomplete suffixes
+    if word.endswith(('ti', 'si', 'ri', 'di', 'ni', 'gi', 'ci', 'cti')) and len(word) > 4:
+        return True
+    
+    # Invalid consonant clusters at word start
+    invalid_starts = {
+        'bstr', 'ppr', 'ntr', 'ncl', 'nst', 'xpl', 'xtr',
+        'bs', 'bt', 'ck', 'ct', 'dl', 'dm', 'dn', 'ds', 'dt',
+        'lb', 'lc', 'ld', 'lf', 'lg', 'lk', 'lm', 'ln', 'lp', 'lr', 'ls', 'lt',
+        'mb', 'mc', 'md', 'mf', 'mg', 'mk', 'ml', 'mn', 'mp', 'mr', 'ms', 'mt',
+        'nb', 'nc', 'nd', 'nf', 'ng', 'nk', 'nl', 'nm', 'np', 'nr', 'ns', 'nt',
+        'rb', 'rc', 'rd', 'rf', 'rg', 'rk', 'rl', 'rm', 'rn', 'rp', 'rs', 'rt',
+        'sb', 'sd', 'sf', 'sg', 'sr', 'ss', 'tb', 'tc', 'td', 'tf', 'tg', 'tk',
+        'tl', 'tm', 'tn', 'tp', 'ts', 'tt', 'thm', 'rch', 'rth', 'lst', 'rst',
+    }
+    
+    for length in [4, 3, 2]:
+        if len(word) >= length and word[:length] in invalid_starts:
+            return True
+    
+    return False
+
+
 def _extract_keywords(text: str, max_words: int = 8) -> str:
     """
     Extract meaningful keywords from text for search query.
-    Filters out common words and keeps technical terms.
+    Filters out common words, truncated words, and keeps technical terms.
     """
     # Common words to filter out
     stop_words = {
@@ -49,11 +94,20 @@ def _extract_keywords(text: str, max_words: int = 8) -> str:
     keywords = []
     seen = set()
     for word in words:
-        if word not in stop_words and word not in seen:
-            keywords.append(word)
-            seen.add(word)
-            if len(keywords) >= max_words:
-                break
+        if word in stop_words or word in seen:
+            continue
+        # Skip very long words - likely concatenated garbage from PDF extraction
+        if len(word) > 15:
+            logger.debug(f"Skipping long concatenated word: '{word[:30]}...'")
+            continue
+        # Skip truncated words from PDF extraction
+        if _is_truncated_word(word):
+            logger.debug(f"Skipping truncated word: '{word}'")
+            continue
+        keywords.append(word)
+        seen.add(word)
+        if len(keywords) >= max_words:
+            break
     
     return ' '.join(keywords)
 
@@ -143,7 +197,7 @@ def ieee_search(
         response = requests.get(
             IEEE_BASE_URL,
             params=params,
-            timeout=20,
+            timeout=8,
             headers={"Accept": "application/json"}
         )
         response.raise_for_status()

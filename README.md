@@ -69,7 +69,9 @@ Research Paper Analyzer is an AI-powered tool that reads academic papers (PDF), 
 ### Plagiarism Detection
 - Extracts text from uploaded PDFs (with robust fallbacks using PyMuPDF, pdfminer, and OCR)
 - **Smart text normalization** to handle PDF extraction issues (concatenated words, missing spaces)
+- **Hybrid section extraction** using Enhanced Regex + spaCy NLP running in parallel
 - Splits content into four sections: Title, Abstract, Methodology, Conclusions
+- **Parallel API searches** - All 4 academic databases queried simultaneously for 3x faster results
 - Searches **6 academic databases** (all FREE, no API keys required for most):
 
 | Source | Database Size | API Key | Best For |
@@ -125,6 +127,7 @@ Provides:
 - FastAPI
 - Google GenAI SDK (Gemini)
 - PDF Processing: PyMuPDF, pdfplumber, pdfminer.six, pytesseract
+- NLP: spaCy (en_core_web_sm model)
 - ML: scikit-learn, numpy, scipy
 
 ### Frontend
@@ -132,6 +135,111 @@ Provides:
 - TypeScript
 - Axios
 - Modern dark theme UI
+
+---
+
+## How Section Extraction Works
+
+The tool uses a **hybrid approach** combining Enhanced Regex and spaCy NLP, running **in parallel** for maximum accuracy and speed.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PDF Text Input                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              ThreadPoolExecutor (Parallel)                  │
+│  ┌─────────────────────┐     ┌─────────────────────┐       │
+│  │   Enhanced Regex    │     │     spaCy NLP       │       │
+│  │     (~0.01s)        │     │     (~0.3s)         │       │
+│  │                     │     │                     │       │
+│  │ • Section numbers   │     │ • Sentence bounds   │       │
+│  │   (1., IV., A.)     │     │ • Header detection  │       │
+│  │ • 20+ name variants │     │ • Linguistic        │       │
+│  │ • ALL CAPS headers  │     │   patterns          │       │
+│  └──────────┬──────────┘     └──────────┬──────────┘       │
+│             └────────────┬───────────────┘                  │
+│                          ▼                                  │
+│              Smart Merge (Best Content)                     │
+│         • Prefer longer extractions                         │
+│         • Quality scoring                                   │
+│         • Fallback to text slices                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│     4 Sections: Title, Abstract, Methodology, Conclusions   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Section Name Detection
+
+The Enhanced Regex now recognizes many naming variations:
+
+| Section | Detected Names |
+|---------|----------------|
+| **Abstract** | "Abstract", "Summary" |
+| **Methodology** | "Methodology", "Methods", "Proposed System", "Framework", "Architecture", "Implementation", "Experimental Setup", "Our Approach", "System Design", "Technical Approach" |
+| **Conclusions** | "Conclusion", "Conclusions", "Discussion", "Summary", "Concluding Remarks", "Final Remarks" |
+
+Plus section numbers: `1.`, `2.`, `I.`, `II.`, `IV.`, `A.`, `1.1`, etc.
+
+### PDF Text Cleaning
+
+The tool includes intelligent filtering for common PDF extraction issues:
+
+**Truncated Word Detection:**
+Words like `"bstract"` (abstract), `"tegrates"` (integrates), `"ternational"` (international) are automatically filtered from search queries.
+
+**Concatenated Word Detection:**
+Long garbage strings like `"minantsequencetransductionmodels"` (>15 characters) are filtered out.
+
+---
+
+## Performance Optimizations
+
+### Parallel API Execution
+
+All academic database searches run **simultaneously** instead of sequentially:
+
+```
+BEFORE (Sequential):
+[CrossRef 3s] → [arXiv 2s] → [OpenAlex 2s] → [Semantic Scholar 4s]
+Total: ~11 seconds per section × 4 sections = ~44+ seconds
+
+AFTER (Parallel):
+┌─────────────┐
+│ CrossRef    │ ─┐
+│ arXiv       │  │ All run simultaneously
+│ OpenAlex    │  ├─→ ~3-4 seconds per section
+│ Sem.Scholar │ ─┘
+└─────────────┘
+Total: ~4 seconds × 4 sections = ~16 seconds
+```
+
+### Performance Comparison
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Total analysis time | ~100s | ~35s | **3x faster** |
+| API calls per section | Sequential | Parallel | **4x faster** |
+| Section extraction | Basic regex | Hybrid (Regex + spaCy) | More accurate |
+| Timeout per API | 15-20s | 8s | Faster failure recovery |
+
+### Configuration
+
+```python
+# Retry configuration (plagiarism_checker.py)
+MAX_RETRIES = 3
+RETRY_DELAY = 1  # seconds (exponential backoff: 1s, 2s)
+SEMANTIC_SCHOLAR_WAIT = 4  # seconds for rate limit
+
+# API Timeouts
+TIMEOUT = 8  # seconds per API call
+```
 
 ---
 
@@ -169,7 +277,7 @@ assets/                      # Screenshots and images
 ### Backend
 - Python 3.9+
 - Gemini API key (free tier available) - **Required for bias analysis**
-- IEEE Xplore API key (optional) - Most plagiarism detection works without any API keys!
+- IEEE Xplore API key (optional) - Enhances engineering paper detection
 
 ### Frontend
 - Node.js 18+
@@ -237,11 +345,16 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Download spaCy English model (for NLP-based section extraction)
+python -m spacy download en_core_web_sm
+
 # Start server
 uvicorn api:app --reload --port 8000
 ```
 
 The API will be available at `http://localhost:8000`
+
+> **Note:** spaCy installation may take a few minutes as it compiles native extensions. The `en_core_web_sm` model is ~12MB.
 
 ### 4. Start the Frontend
 

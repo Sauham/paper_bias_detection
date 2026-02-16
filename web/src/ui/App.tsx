@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import axios from 'axios'
 import BiasAnalysisSection from './BiasAnalysisSection'
+import GridDistortion from './GridDistortion'
 
 // Custom hook for scroll-based animations
 function useScrollAnimation(direction: 'up' | 'down' | 'left' | 'right' = 'up', threshold = 0.1) {
@@ -60,12 +61,48 @@ const styles = {
     margin: '0 auto',
     padding: '32px 24px',
     minHeight: '100vh',
+    position: 'relative' as const,
+    zIndex: 2,
+  } as React.CSSProperties,
+
+  fullPageBackground: {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100vw',
+    height: '100vh',
+    zIndex: 0,
+    opacity: 0.5,
+    overflow: 'hidden',
+    pointerEvents: 'none' as const,
+  } as React.CSSProperties,
+
+  backgroundOverlay: {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    zIndex: 1,
+    background: 'linear-gradient(180deg, rgba(0, 10, 30, 0.5) 0%, rgba(10, 20, 40, 0.65) 50%, rgba(0, 10, 30, 0.75) 100%)',
+    pointerEvents: 'none' as const,
+    userSelect: 'none' as const,
   } as React.CSSProperties,
 
   header: {
     textAlign: 'center' as const,
     marginBottom: 48,
     animation: 'fadeInDown 0.8s ease-out',
+    position: 'relative' as const,
+    minHeight: 300,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '80px 24px 48px',
+    zIndex: 1,
   } as React.CSSProperties,
 
   logo: {
@@ -88,28 +125,31 @@ const styles = {
   } as React.CSSProperties,
 
   title: {
-    fontSize: 36,
-    fontWeight: 700,
-    background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%)',
-    backgroundSize: '200% 200%',
-    animation: 'gradientShift 4s ease infinite',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
+    fontSize: 52,
+    fontWeight: 800,
+    color: '#ffffff',
+    textShadow: '0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(59, 130, 246, 0.4)',
+    letterSpacing: '-0.02em',
+    lineHeight: 1.2,
   } as React.CSSProperties,
 
   subtitle: {
-    color: 'var(--text-secondary)',
-    fontSize: 16,
-    maxWidth: 600,
-    margin: '16px auto 0',
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 19,
+    maxWidth: 650,
+    margin: '20px auto 0',
     animation: 'fadeInUp 0.8s ease-out 0.2s both',
+    textShadow: '0 2px 20px rgba(0, 0, 0, 0.8), 0 4px 40px rgba(0, 0, 0, 0.5)',
+    fontWeight: 500,
+    lineHeight: 1.6,
   } as React.CSSProperties,
 
   card: {
-    background: 'var(--bg-card)',
+    background: 'rgba(15, 23, 42, 0.85)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
     borderRadius: 'var(--border-radius-lg)',
-    border: '1px solid var(--border-color)',
+    border: '1px solid rgba(59, 130, 246, 0.2)',
     padding: 24,
     marginBottom: 24,
     transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -117,9 +157,9 @@ const styles = {
   } as React.CSSProperties,
 
   cardHover: {
-    background: 'var(--bg-card-hover)',
-    borderColor: 'var(--accent-primary)',
-    boxShadow: 'var(--shadow-lg)',
+    background: 'rgba(15, 23, 42, 0.95)',
+    borderColor: 'rgba(59, 130, 246, 0.6)',
+    boxShadow: '0 20px 50px rgba(59, 130, 246, 0.3), 0 0 0 1px rgba(59, 130, 246, 0.2)',
   } as React.CSSProperties,
 
   uploadZone: {
@@ -269,6 +309,71 @@ const styles = {
     borderTopColor: 'var(--accent-primary)',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
+  } as React.CSSProperties,
+
+  featureCardsContainer: {
+    position: 'relative' as const,
+    marginBottom: 64,
+    marginTop: 48,
+  } as React.CSSProperties,
+
+  featureCardsWrapper: {
+    position: 'relative' as const,
+    minHeight: 320,
+  } as React.CSSProperties,
+
+  featureCard: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    background: 'rgba(15, 23, 42, 0.9)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    borderRadius: 20,
+    border: '1px solid rgba(59, 130, 246, 0.3)',
+    padding: 48,
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.2)',
+    transition: 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+  } as React.CSSProperties,
+
+  featureCardTitle: {
+    fontSize: 28,
+    fontWeight: 700,
+    color: '#ffffff',
+    marginBottom: 16,
+    textAlign: 'center' as const,
+  } as React.CSSProperties,
+
+  featureCardDescription: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.85)',
+    lineHeight: 1.7,
+    textAlign: 'center' as const,
+    maxWidth: 600,
+    margin: '0 auto',
+  } as React.CSSProperties,
+
+  featureDotsContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 32,
+  } as React.CSSProperties,
+
+  featureDot: {
+    width: 12,
+    height: 12,
+    borderRadius: '50%',
+    background: 'rgba(255, 255, 255, 0.3)',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+  } as React.CSSProperties,
+
+  featureDotActive: {
+    background: '#60a5fa',
+    width: 32,
+    borderRadius: 6,
   } as React.CSSProperties,
 }
 
@@ -540,7 +645,7 @@ function OverviewStats({ plagiarism }: { plagiarism: any }) {
   )
 }
 
-function SectionResult({ name, data, icon, delay = 0, direction = 'left' }: { name: string; data: any; icon: string; delay?: number; direction?: 'left' | 'right' }) {
+function SectionResult({ name, data, delay = 0, direction = 'left' }: { name: string; data: any; delay?: number; direction?: 'left' | 'right' }) {
   const [expanded, setExpanded] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const scrollAnim = useScrollAnimation(direction)
@@ -570,13 +675,8 @@ function SectionResult({ name, data, icon, delay = 0, direction = 'left' }: { na
         onClick={() => setExpanded(!expanded)}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ 
-            fontSize: 24,
-            transition: 'transform 0.3s ease',
-            transform: isHovered ? 'scale(1.2) rotate(5deg)' : 'scale(1) rotate(0deg)',
-          }}>{icon}</span>
           <div>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{name}</h3>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#ffffff' }}>{name}</h3>
             <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
               {matches.length} sources found
             </div>
@@ -693,6 +793,77 @@ function ScrollSection({
   )
 }
 
+// Feature Cards Component with Auto-Swap Animation
+function FeatureCards() {
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  const features = [
+    {
+      title: "AI-Powered Analysis",
+      description: "Advanced machine learning algorithms provide deep insights into potential biases and plagiarism, going beyond simple text matching to understand context and meaning."
+    },
+    {
+      title: "Comprehensive Coverage",
+      description: "Analyzes multiple aspects including title, abstract, methodology, and conclusions. Our system checks against millions of academic sources for thorough plagiarism detection."
+    },
+    {
+      title: "Lightning Fast Results",
+      description: "Get detailed analysis reports in seconds, not hours. Our optimized pipeline processes complex documents quickly while maintaining accuracy."
+    },
+    {
+      title: "Research-Grade Accuracy",
+      description: "Built by researchers for researchers. Our bias detection model is trained on thousands of academic papers to understand subtle language patterns and biases."
+    }
+  ]
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % features.length)
+    }, 4000)
+
+    return () => clearInterval(interval)
+  }, [features.length])
+
+  return (
+    <div style={styles.featureCardsContainer}>
+      <div style={styles.featureCardsWrapper}>
+        {features.map((feature, index) => (
+          <div
+            key={index}
+            style={{
+              ...styles.featureCard,
+              opacity: index === activeIndex ? 1 : 0,
+              transform: index === activeIndex 
+                ? 'translateY(0) scale(1)' 
+                : index < activeIndex 
+                  ? 'translateY(-20px) scale(0.95)' 
+                  : 'translateY(20px) scale(0.95)',
+              pointerEvents: index === activeIndex ? 'auto' : 'none',
+              zIndex: index === activeIndex ? 10 : 0,
+            }}
+          >
+            <h2 style={styles.featureCardTitle}>{feature.title}</h2>
+            <p style={styles.featureCardDescription}>{feature.description}</p>
+          </div>
+        ))}
+      </div>
+      
+      <div style={styles.featureDotsContainer}>
+        {features.map((_, index) => (
+          <div
+            key={index}
+            onClick={() => setActiveIndex(index)}
+            style={{
+              ...styles.featureDot,
+              ...(index === activeIndex ? styles.featureDotActive : {}),
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function LoadingOverlay({ message }: { message: string }) {
   return (
     <div style={{ ...styles.loadingOverlay, animation: 'fadeIn 0.3s ease-out' }}>
@@ -786,19 +957,39 @@ export default function App() {
   const biasData = report?.bias_analysis || null
 
   return (
-    <div style={styles.container}>
-      {loading && <LoadingOverlay message={loadingMessage} />}
-      
-      {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.logo}>
-          <h1 style={styles.title}>Research Paper Analyzer</h1>
-        </div>
-        <p style={styles.subtitle}>
-          AI-powered plagiarism detection and bias analysis for academic papers. 
-          Upload your PDF and get comprehensive insights.
-        </p>
-      </header>
+    <>
+      {/* Full Page Grid Distortion Background */}
+      <div style={styles.fullPageBackground}>
+        <GridDistortion
+          imageSrc="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1920&q=80"
+          grid={15}
+          mouse={0.25}
+          strength={0.3}
+          relaxation={0.85}
+        />
+      </div>
+
+      {/* Dark Overlay for Better Text Readability */}
+      <div style={styles.backgroundOverlay} />
+
+      <div style={styles.container}>
+        {loading && <LoadingOverlay message={loadingMessage} />}
+        
+        {/* Header */}
+        <header style={styles.header}>
+          <div style={styles.logo}>
+            <h1 style={styles.title}>Research Paper Analyzer</h1>
+          </div>
+          <p style={styles.subtitle}>
+            AI-powered plagiarism detection and bias analysis for academic papers. 
+            Upload your PDF and get comprehensive insights.
+          </p>
+        </header>
+
+        {/* Feature Cards - Why We're Better */}
+        <ScrollSection direction="up">
+          <FeatureCards />
+        </ScrollSection>
 
       {/* Upload Section */}
       <FileUpload
@@ -841,22 +1032,19 @@ export default function App() {
                 fontSize: 24, 
                 fontWeight: 600, 
                 marginBottom: 20,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
+                color: '#ffffff',
               }}>
-                <span>📋</span> 
-                <span>Plagiarism Analysis Results</span>
+                Plagiarism Analysis Results
               </h2>
               <OverviewStats plagiarism={plagiarismData} />
             </div>
           </ScrollSection>
 
           {/* Section Results - alternating left/right scroll animations */}
-          <SectionResult name="Title" data={plagiarismData?.sections?.Title} icon="📝" delay={0} direction="left" />
-          <SectionResult name="Abstract" data={plagiarismData?.sections?.Abstract} icon="📄" delay={0.1} direction="right" />
-          <SectionResult name="Methodology" data={plagiarismData?.sections?.Methodology} icon="🔬" delay={0.2} direction="left" />
-          <SectionResult name="Conclusions" data={plagiarismData?.sections?.Conclusions} icon="✅" delay={0.3} direction="right" />
+          <SectionResult name="Title" data={plagiarismData?.sections?.Title} delay={0} direction="left" />
+          <SectionResult name="Abstract" data={plagiarismData?.sections?.Abstract} delay={0.1} direction="right" />
+          <SectionResult name="Methodology" data={plagiarismData?.sections?.Methodology} delay={0.2} direction="left" />
+          <SectionResult name="Conclusions" data={plagiarismData?.sections?.Conclusions} delay={0.3} direction="right" />
 
           {/* Bias Analysis - scroll up animation */}
           <ScrollSection direction="up" delay={0.2}>
@@ -864,6 +1052,7 @@ export default function App() {
           </ScrollSection>
         </>
       )}
-    </div>
+      </div>
+    </>
   )
 }

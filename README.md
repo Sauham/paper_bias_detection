@@ -368,6 +368,45 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
+## Deployment
+
+### Quick Deploy to Production
+
+**Ready to deploy?** We provide comprehensive guides for deploying your application:
+
+📚 **[Complete Deployment Guide](DEPLOYMENT.md)** - Detailed step-by-step instructions
+
+⚡ **[Quick Start Guide](DEPLOYMENT_QUICKSTART.md)** - Deploy in 5 minutes
+
+### Recommended Stack
+- **Backend**: Render Web Service ($7/month for Starter plan)
+- **Frontend**: Vercel (Free tier)
+- **Total Cost**: ~$7/month
+
+### One-Click Deploy Options
+
+**Deploy Backend to Render:**
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+Just connect your GitHub repo and Render will use the `render.yaml` configuration.
+
+**Deploy Frontend to Vercel:**
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/rk0802p/paper_bias_detection&root-directory=web&env=VITE_API_BASE&project-name=paper-bias-frontend)
+
+### Deployment Checklist
+- [ ] Backend deployed on Render
+- [ ] Frontend deployed on Vercel
+- [ ] Environment variables configured (`GEMINI_API_KEY`, `VITE_API_BASE`)
+- [ ] CORS settings updated
+- [ ] Test with real PDF upload
+- [ ] Monitor logs for errors
+
+For detailed instructions, see the [deployment guides](DEPLOYMENT.md).
+
+---
+
 ## API Endpoints
 
 ### POST /analyze

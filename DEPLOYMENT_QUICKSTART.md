@@ -127,12 +127,19 @@ render logs -s your-service-name
 
 ## Troubleshooting Quick Fixes
 
+### Python 3.14 Compatibility Error
+```bash
+# Error: "Pydantic V1 functionality isn't compatible with Python 3.14"
+# Fix: Ensure runtime.txt exists with python-3.11.10
+# Or set PYTHON_VERSION=3.11.10 in Render environment variables
+```
+
 ### Backend Won't Start
 ```bash
 # Check logs on Render dashboard
 # Common issues:
 # 1. Missing GEMINI_API_KEY
-# 2. Wrong Python version
+# 2. Python version incompatibility (use 3.11.10)
 # 3. spaCy model download failed
 ```
 

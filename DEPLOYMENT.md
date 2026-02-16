@@ -253,7 +253,22 @@ app.add_middleware(
     command: curl https://your-backend-url.onrender.com/health
   ```
 
-### Issue 2: Build Fails - spaCy Model Download
+### Issue 2: Python 3.14 Compatibility Error
+
+**Problem**: Error message: `Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater`
+
+**Solution**: 
+- Add `runtime.txt` to project root with: `python-3.11.10`
+- Update `PYTHON_VERSION` environment variable to `3.11.10`
+- Render will now use Python 3.11 instead of 3.14
+- Redeploy your service
+
+**Alternative**: In Render dashboard, set environment variable:
+```
+PYTHON_VERSION=3.11.10
+```
+
+### Issue 3: Build Fails - spaCy Model Download
 
 **Problem**: spaCy model download fails during build
 
@@ -261,7 +276,7 @@ app.add_middleware(
 - Ensure build command includes: `python -m spacy download en_core_web_sm`
 - Or add to `requirements.txt`: `https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz`
 
-### Issue 3: 502 Bad Gateway
+### Issue 4: 502 Bad Gateway
 
 **Problem**: Backend crashes or out of memory
 
@@ -270,7 +285,7 @@ app.add_middleware(
 - Upgrade to Standard plan (2GB RAM)
 - Optimize PDF processing in code
 
-### Issue 4: API Calls Failing from Frontend
+### Issue 5: API Calls Failing from Frontend
 
 **Problem**: CORS errors or connection refused
 
@@ -280,7 +295,7 @@ app.add_middleware(
 3. Ensure backend is running (check logs)
 4. Test backend directly with curl
 
-### Issue 5: Slow PDF Processing
+### Issue 6: Slow PDF Processing
 
 **Problem**: Analysis takes too long
 

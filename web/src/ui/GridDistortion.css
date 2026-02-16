@@ -1,0 +1,24 @@
+.distortion-container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.distortion-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+/* Ensure full coverage on all devices */
+@media (max-width: 768px) {
+  .distortion-container {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+}

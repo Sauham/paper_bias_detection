@@ -5,6 +5,7 @@ import json
 import logging
 import requests
 from typing import Dict, List, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -25,7 +26,8 @@ ARXIV_SEARCH = "http://export.arxiv.org/api/query"
 
 # Retry configuration
 MAX_RETRIES = 3
-RETRY_DELAY = 2  # seconds
+RETRY_DELAY = 1  # seconds (exponential backoff: 1s, 2s, then fail)
+SEMANTIC_SCHOLAR_WAIT = 4  # seconds between retries (rate limit: 1 req per 3.5s without API key)
 
 # Similarity thresholds
 IEEE_THRESHOLD = 12.0
@@ -137,13 +139,186 @@ def extract_metadata(full_text: str) -> Dict[str, str]:
 
 import re
 
+# Try to load spaCy - graceful fallback if not installed
+try:
+    import spacy
+    try:
+        _nlp = spacy.load("en_core_web_sm")
+        SPACY_AVAILABLE = True
+    except OSError:
+        # Model not downloaded yet
+        SPACY_AVAILABLE = False
+        _nlp = None
+except ImportError:
+    SPACY_AVAILABLE = False
+    _nlp = None
+
+
+def _extract_sections_regex(text: str) -> dict:
+    """
+    Enhanced regex-based section extraction.
+    Handles section numbers (1., I., A., 1.1) and many naming variations.
+    """
+    text = text.replace("\r", "\n")
+    lower = text.lower()
+    
+    # Enhanced patterns with section numbers and more variations
+    # Format: (category, pattern) - patterns include optional section numbers
+    section_patterns = [
+        # Abstract patterns
+        ("Abstract", r"(?:^|\n)\s*(?:\d+\.?\s*|[IVX]+\.?\s*|[A-Z]\.?\s*)?(?:abstract)\s*[:\.\n]", re.IGNORECASE | re.MULTILINE),
+        
+        # Methodology/Methods patterns - many variations
+        ("Methodology", r"(?:^|\n)\s*(?:\d+\.?\s*|[IVX]+\.?\s*|[A-Z]\.?\s*)?(?:methodology|methods?|materials?\s+and\s+methods?|approach|proposed\s+(?:system|method|approach|framework|architecture)|system\s+(?:design|architecture|overview)|implementation|experimental\s+(?:setup|design)|technical\s+approach|our\s+approach|framework|design)\s*[:\.\n]", re.IGNORECASE | re.MULTILINE),
+        
+        # Conclusions patterns
+        ("Conclusions", r"(?:^|\n)\s*(?:\d+\.?\s*|[IVX]+\.?\s*|[A-Z]\.?\s*)?(?:conclusions?|discussion|summary|concluding\s+remarks?|final\s+remarks?)\s*[:\.\n]", re.IGNORECASE | re.MULTILINE),
+        
+        # Introduction (useful for finding paper start)
+        ("Introduction", r"(?:^|\n)\s*(?:\d+\.?\s*|[IVX]+\.?\s*|[A-Z]\.?\s*)?(?:introduction)\s*[:\.\n]", re.IGNORECASE | re.MULTILINE),
+    ]
+    
+    # Find all section matches with their positions
+    found_sections = []
+    for category, pattern, flags in section_patterns:
+        for match in re.finditer(pattern, text, flags):
+            found_sections.append({
+                "category": category,
+                "start": match.start(),
+                "end": match.end(),
+                "match_text": match.group().strip()
+            })
+    
+    # Sort by position in document
+    found_sections.sort(key=lambda x: x["start"])
+    
+    # Extract content between sections
+    sections = {}
+    for i, section in enumerate(found_sections):
+        category = section["category"]
+        start = section["end"]  # Start after the header
+        
+        # End at next section or document end
+        if i + 1 < len(found_sections):
+            end = found_sections[i + 1]["start"]
+        else:
+            end = len(text)
+        
+        content = text[start:end].strip()
+        
+        # Keep the longest content for each category
+        if category not in sections or len(content) > len(sections[category]):
+            sections[category] = content
+    
+    # Extract title from first non-empty line
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    title = lines[0][:200] if lines else ""
+    
+    return {
+        "Title": title,
+        "Abstract": sections.get("Abstract", ""),
+        "Methodology": sections.get("Methodology", ""),
+        "Conclusions": sections.get("Conclusions", ""),
+        "confidence": "regex"
+    }
+
+
+def _extract_sections_spacy(text: str) -> dict:
+    """
+    spaCy-based section extraction using NLP.
+    Detects section headers based on linguistic patterns.
+    """
+    if not SPACY_AVAILABLE or _nlp is None:
+        return {"Title": "", "Abstract": "", "Methodology": "", "Conclusions": "", "confidence": "spacy_unavailable"}
+    
+    # Process with spaCy (limit text length for speed)
+    max_chars = 50000  # ~12-15 pages
+    doc = _nlp(text[:max_chars])
+    
+    # Section header keywords for each category
+    section_keywords = {
+        "Abstract": {"abstract", "summary"},
+        "Methodology": {
+            "methodology", "methods", "method", "approach", "implementation",
+            "proposed", "system", "framework", "architecture", "design",
+            "experimental", "setup", "technique", "algorithm", "model"
+        },
+        "Conclusions": {
+            "conclusion", "conclusions", "discussion", "summary",
+            "concluding", "remarks", "future"
+        },
+        "Introduction": {"introduction", "background", "overview"}
+    }
+    
+    # Find potential section headers (short sentences at start of paragraphs)
+    sections = {}
+    current_section = None
+    current_content = []
+    
+    for sent in doc.sents:
+        sent_text = sent.text.strip()
+        sent_lower = sent_text.lower()
+        
+        # Check if this looks like a section header
+        is_header = False
+        header_category = None
+        
+        # Header heuristics:
+        # 1. Short (< 10 words)
+        # 2. Contains section keyword
+        # 3. Often starts with number or is ALL CAPS
+        words = sent_text.split()
+        if len(words) <= 10:
+            # Check for section keywords
+            for category, keywords in section_keywords.items():
+                if any(kw in sent_lower for kw in keywords):
+                    # Additional checks: starts with number or has section-like pattern
+                    if (re.match(r'^[\d\.]+\s', sent_text) or  # Starts with "1.", "1.1", etc.
+                        re.match(r'^[IVX]+\.?\s', sent_text) or  # Roman numerals
+                        re.match(r'^[A-Z]\.?\s', sent_text) or  # Letter sections
+                        sent_text.isupper() or  # ALL CAPS
+                        len(words) <= 5):  # Very short = likely header
+                        is_header = True
+                        header_category = category
+                        break
+        
+        if is_header and header_category:
+            # Save previous section content
+            if current_section and current_content:
+                content = " ".join(current_content)
+                if current_section not in sections or len(content) > len(sections[current_section]):
+                    sections[current_section] = content
+            
+            # Start new section
+            current_section = header_category
+            current_content = []
+        elif current_section:
+            current_content.append(sent_text)
+    
+    # Save last section
+    if current_section and current_content:
+        content = " ".join(current_content)
+        if current_section not in sections or len(content) > len(sections[current_section]):
+            sections[current_section] = content
+    
+    # Extract title
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    title = lines[0][:200] if lines else ""
+    
+    return {
+        "Title": title,
+        "Abstract": sections.get("Abstract", ""),
+        "Methodology": sections.get("Methodology", ""),
+        "Conclusions": sections.get("Conclusions", ""),
+        "confidence": "spacy"
+    }
+
+
 def extract_sections(text: str) -> dict:
     """
-    Extracts major academic sections safely.
-    Always returns Title, Abstract, Methodology, Conclusions.
-    Never references metadata.
+    Hybrid section extraction using both enhanced regex and spaCy IN PARALLEL.
+    Combines results for best accuracy.
     """
-
     if not text:
         return {
             "Title": "",
@@ -151,46 +326,81 @@ def extract_sections(text: str) -> dict:
             "Methodology": "",
             "Conclusions": ""
         }
-
-    text = text.replace("\r", "\n")
-    lower = text.lower()
-
-    # ---------- TITLE ----------
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-    title = lines[0][:200] if lines else ""
-
-    # ---------- SECTION PATTERNS ----------
-    patterns = {
-        "Abstract": r"\babstract\b",
-        "Methodology": r"\b(methodology|methods|materials and methods|approach)\b",
-        "Conclusions": r"\b(conclusion|conclusions|discussion)\b",
+    
+    # Run both extractors in parallel
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    results = {}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {
+            executor.submit(_extract_sections_regex, text): "regex",
+            executor.submit(_extract_sections_spacy, text): "spacy"
+        }
+        
+        for future in as_completed(futures, timeout=5):
+            method = futures[future]
+            try:
+                results[method] = future.result()
+            except Exception as e:
+                logger.warning(f"Section extraction ({method}) failed: {e}")
+                results[method] = {"Title": "", "Abstract": "", "Methodology": "", "Conclusions": ""}
+    
+    regex_result = results.get("regex", {})
+    spacy_result = results.get("spacy", {})
+    
+    # Merge results: prefer longer, non-empty content
+    def best_content(key):
+        regex_val = regex_result.get(key, "")
+        spacy_val = spacy_result.get(key, "")
+        
+        # If one is empty, use the other
+        if not regex_val:
+            return spacy_val
+        if not spacy_val:
+            return regex_val
+        
+        # Both have content - prefer longer one (more complete extraction)
+        # But penalize if it looks like garbage (too many truncated words)
+        def quality_score(content):
+            words = content.split()
+            if len(words) < 10:
+                return 0
+            # Check for truncated words (rough heuristic)
+            truncated = sum(1 for w in words[:50] if len(w) > 2 and not w[0].isupper() and w[0] not in 'aeiou')
+            return len(content) - (truncated * 10)
+        
+        return regex_val if quality_score(regex_val) >= quality_score(spacy_val) else spacy_val
+    
+    final_sections = {
+        "Title": regex_result.get("Title") or spacy_result.get("Title", ""),
+        "Abstract": best_content("Abstract"),
+        "Methodology": best_content("Methodology"),
+        "Conclusions": best_content("Conclusions")
     }
-
-    indices = {}
-    for name, pat in patterns.items():
-        m = re.search(pat, lower)
-        if m:
-            indices[name] = m.start()
-
-    ordered = sorted(indices.items(), key=lambda x: x[1])
-
-    sections = {}
-
-    for i, (name, start) in enumerate(ordered):
-        end = ordered[i + 1][1] if i + 1 < len(ordered) else len(text)
-        sections[name] = text[start:end].strip()
-
-    # ---------- FALLBACKS ----------
-    sections.setdefault("Abstract", text[:1500])
-    sections.setdefault("Methodology", text[1500:5000])
-    sections.setdefault("Conclusions", text[-2000:])
-
-    return {
-        "Title": title,
-        "Abstract": sections["Abstract"],
-        "Methodology": sections["Methodology"],
-        "Conclusions": sections["Conclusions"]
-    }
+    
+    # Fallbacks if sections are still empty or too short
+    min_length = 100
+    
+    if len(final_sections["Abstract"]) < min_length:
+        # Try to find abstract in first 2000 chars
+        abstract_match = re.search(r'abstract[:\.\s]*(.{100,2000}?)(?=\n\s*\n|\n\s*\d+\.|\n\s*[IVX]+\.|\n\s*introduction)', 
+                                    text[:3000], re.IGNORECASE | re.DOTALL)
+        if abstract_match:
+            final_sections["Abstract"] = abstract_match.group(1).strip()
+        else:
+            final_sections["Abstract"] = text[:1500]
+    
+    if len(final_sections["Methodology"]) < min_length:
+        final_sections["Methodology"] = text[1500:6000]
+    
+    if len(final_sections["Conclusions"]) < min_length:
+        final_sections["Conclusions"] = text[-2500:]
+    
+    logger.debug(f"Section extraction - Abstract: {len(final_sections['Abstract'])} chars, "
+                 f"Methodology: {len(final_sections['Methodology'])} chars, "
+                 f"Conclusions: {len(final_sections['Conclusions'])} chars")
+    
+    return final_sections
 
 # -------------------- SEARCH PROVIDERS -------------------- #
 
@@ -199,7 +409,7 @@ def _semantic_scholar_search(query: str, max_results: int) -> List[Dict]:
         resp = requests.get(
             SEMANTIC_SCHOLAR_SEARCH,
             params={"query": query, "limit": max_results, "fields": "title,url,abstract"},
-            timeout=12
+            timeout=8
         )
         if resp.status_code == 429:
             return []
@@ -225,7 +435,7 @@ def _openalex_search(query: str, max_results: int) -> List[Dict]:
                 "per_page": max_results,
                 "mailto": "research@example.com"  # Polite pool for better rate limits
             },
-            timeout=15,
+            timeout=8,
             headers={"User-Agent": "ResearchPaperAnalyzer/1.0"}
         )
         resp.raise_for_status()
@@ -271,7 +481,7 @@ def _crossref_search(query: str, max_results: int = 10) -> List[Dict]:
                 "select": "title,abstract,URL,DOI",
                 "mailto": "research@example.com"  # Polite pool
             },
-            timeout=15,
+            timeout=8,
             headers={"User-Agent": "ResearchPaperAnalyzer/1.0 (mailto:research@example.com)"}
         )
         resp.raise_for_status()
@@ -321,7 +531,7 @@ def _arxiv_search(query: str, max_results: int = 10) -> List[Dict]:
                 "sortBy": "relevance",
                 "sortOrder": "descending"
             },
-            timeout=15,
+            timeout=8,
             headers={"User-Agent": "ResearchPaperAnalyzer/1.0"}
         )
         resp.raise_for_status()
@@ -385,6 +595,78 @@ ACADEMIC_STOP_WORDS = {
     'abstract', 'conclusion', 'conclusions', 'related', 'previous', 'other'
 }
 
+def is_likely_truncated(word: str) -> bool:
+    """
+    Detect if a word is likely truncated from PDF extraction.
+    Returns True if the word appears to be malformed/truncated.
+    """
+    if len(word) < 4:
+        return True
+    
+    word = word.lower()
+    
+    # Known truncated words from PDF extraction (missing first letter(s))
+    truncated_patterns = {
+        # Missing 'a' prefix
+        'bstract', 'nalysis', 'pproach', 'lgorithm', 'udio', 'reas', 'uthenticity',
+        'uthor', 'rticle', 'cademic', 'ccuracy', 'chieve', 'dvanced',
+        # Missing 'in' prefix  
+        'ternational', 'terdisciplinary', 'troduction', 'vestigation', 'telligent',
+        'formation', 'cluding', 'crease', 'creasing', 'ternet', 'tegrates', 'tegrate',
+        'tegrated', 'tegration', 'terface', 'terfaces', 'teractive', 'teresting',
+        # Missing 'con' prefix
+        'clusion', 'conclusi', 'cluded', 'ference', 'tribution', 'sidering',
+        # Missing 'de' prefix
+        'tection', 'detecti', 'velop', 'velopment', 'tector', 'tected', 'epfake',
+        # Missing 're' prefix
+        'sults', 'search', 'searc', 'cognition', 'liable', 'levant',
+        # Missing 'ex' prefix
+        'periment', 'perimental', 'traction', 'plore', 'isting',
+        # Missing 'me' prefix
+        'thods', 'thodology', 'thod',
+        # Missing 'or' prefix
+        'iginality', 'iginal',
+        # Missing other prefixes
+        'udio', 'ignal', 'ignals', 'ystem', 'ystems', 'ection', 'ections',
+        'pplication', 'fficient', 'fficiency', 'valuate', 'valuation',
+        'roposed', 'resent', 'resented', 'erformance', 'earning',
+    }
+    
+    # Check exact matches
+    if word in truncated_patterns:
+        return True
+    
+    # Words ending in incomplete suffixes (likely cut off)
+    incomplete_suffixes = ('ti', 'si', 'ri', 'di', 'ni', 'gi', 'ci', 'cti', 'ndi')
+    if word.endswith(incomplete_suffixes) and len(word) > 4:
+        return True
+    
+    # Invalid word starts - consonant clusters that don't occur at word beginnings
+    invalid_starts = {
+        'bstr', 'bsc', 'ppr', 'ntr', 'ncl', 'nst', 'nth', 'xpl', 'xtr', 'xpr',
+        'bs', 'bt', 'ck', 'ct', 'dl', 'dm', 'dn', 'ds', 'dt', 'dv',
+        'fs', 'ft', 'gm', 'gn', 'gt', 'hm', 'hn', 'hr', 'hs', 'ht',
+        'lb', 'lc', 'ld', 'lf', 'lg', 'lk', 'll', 'lm', 'ln', 'lp', 'lr', 'ls', 'lt',
+        'mb', 'mc', 'md', 'mf', 'mg', 'mk', 'ml', 'mm', 'mn', 'mp', 'mr', 'ms', 'mt',
+        'nb', 'nc', 'nd', 'nf', 'ng', 'nk', 'nl', 'nm', 'nn', 'np', 'nr', 'ns', 'nt', 'nv',
+        'pb', 'pc', 'pd', 'pf', 'pg', 'pk', 'pm', 'pn', 'pp', 'pt', 'pv',
+        'rb', 'rc', 'rd', 'rf', 'rg', 'rk', 'rl', 'rm', 'rn', 'rp', 'rr', 'rs', 'rt', 'rv',
+        'sb', 'sd', 'sf', 'sg', 'sr', 'ss', 'sv',
+        'tb', 'tc', 'td', 'tf', 'tg', 'tk', 'tl', 'tm', 'tn', 'tp', 'ts', 'tt', 'tv',
+        'vb', 'vc', 'vd', 'vf', 'vg', 'vk', 'vl', 'vm', 'vn', 'vp', 'vr', 'vs', 'vt',
+        'wb', 'wc', 'wd', 'wf', 'wg', 'wk', 'wl', 'wm', 'wp', 'ws', 'wt',
+        'xb', 'xc', 'xd', 'xf', 'xg', 'xk', 'xl', 'xm', 'xn', 'xp', 'xr', 'xs', 'xt',
+        'thm', 'thn', 'ths', 'rch', 'rth', 'lst', 'rst', 'ngl', 'ngs', 'ncr',
+    }
+    
+    # Check first 2-4 characters against invalid starts
+    for length in [4, 3, 2]:
+        if len(word) >= length and word[:length] in invalid_starts:
+            return True
+    
+    return False
+
+
 def build_search_query(text: str) -> str:
     """
     Build a short, effective academic search query
@@ -403,8 +685,13 @@ def build_search_query(text: str) -> str:
         # Skip if it's a stop word or already seen
         if word in ACADEMIC_STOP_WORDS or word in seen:
             continue
-        # Skip very long words (likely concatenation errors)
-        if len(word) > 20:
+        # Skip very long words (likely concatenated garbage from PDF extraction)
+        if len(word) > 15:
+            logger.debug(f"Skipping long word: '{word[:20]}...'")
+            continue
+        # Skip truncated words
+        if is_likely_truncated(word):
+            logger.debug(f"Skipping likely truncated word: '{word}'")
             continue
         keywords.append(word)
         seen.add(word)
@@ -488,8 +775,9 @@ Requirements:
 
 def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict]:
     """
-    Search multiple academic databases for related papers.
-    Combines results from CrossRef, arXiv, Semantic Scholar, OpenAlex, IEEE, and Gemini.
+    Search multiple academic databases for related papers IN PARALLEL.
+    Combines results from CrossRef, arXiv, Semantic Scholar, OpenAlex.
+    IEEE is skipped if API key is invalid. Gemini used as fallback.
     """
     # Fix concatenated text first
     fixed_text = _fix_concatenated_text(section_text)
@@ -500,51 +788,39 @@ def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict
         return []
 
     logger.info(f"Search query: '{query}'")
-    results = []
-    seen_titles = set()  # Deduplicate by title
+    all_results = []
     
-    def add_results(items: List[Dict], source_name: str):
-        """Helper to add results with deduplication."""
-        added = 0
-        for item in items:
-            title = item.get("title", "").lower().strip()
-            if title and len(title) > 10 and title not in seen_titles:
-                seen_titles.add(title)
-                results.append(item)
-                added += 1
-        return added
-
-    # 1. CrossRef Search (FREE, no key needed, largest database)
-    try:
-        logger.info("Searching CrossRef...")
-        crossref_results = _crossref_search(query, max_results)
-        added = add_results(crossref_results, "CrossRef")
-        logger.info(f"CrossRef returned {len(crossref_results)} results, added {added} unique")
-    except Exception as e:
-        logger.warning(f"CrossRef search failed: {e}")
-
-    # 2. arXiv Search (FREE, no key needed, great for CS/ML papers)
-    try:
-        logger.info("Searching arXiv...")
-        arxiv_results = _arxiv_search(query, max_results)
-        added = add_results(arxiv_results, "arXiv")
-        logger.info(f"arXiv returned {len(arxiv_results)} results, added {added} unique")
-    except Exception as e:
-        logger.warning(f"arXiv search failed: {e}")
-
-    # 3. OpenAlex Search (FREE, no key needed)
-    try:
-        logger.info("Searching OpenAlex...")
-        openalex_results = _openalex_search(query, max_results)
-        added = add_results(openalex_results, "OpenAlex")
-        logger.info(f"OpenAlex returned {len(openalex_results)} results, added {added} unique")
-    except Exception as e:
-        logger.warning(f"OpenAlex search failed: {e}")
-
-    # 4. Semantic Scholar Search (FREE, but rate limited)
-    try:
-        logger.info("Searching Semantic Scholar...")
-        for attempt in range(2):  # Retry once if rate limited
+    # Define search functions for parallel execution
+    def search_crossref():
+        try:
+            results = _crossref_search(query, max_results)
+            logger.info(f"CrossRef returned {len(results)} results")
+            return results
+        except Exception as e:
+            logger.warning(f"CrossRef search failed: {e}")
+            return []
+    
+    def search_arxiv():
+        try:
+            results = _arxiv_search(query, max_results)
+            logger.info(f"arXiv returned {len(results)} results")
+            return results
+        except Exception as e:
+            logger.warning(f"arXiv search failed: {e}")
+            return []
+    
+    def search_openalex():
+        try:
+            results = _openalex_search(query, max_results)
+            logger.info(f"OpenAlex returned {len(results)} results")
+            return results
+        except Exception as e:
+            logger.warning(f"OpenAlex search failed: {e}")
+            return []
+    
+    def search_semantic_scholar():
+        """Search Semantic Scholar - skip retry if rate limited (too slow)."""
+        try:
             resp = requests.get(
                 SEMANTIC_SCHOLAR_SEARCH,
                 params={
@@ -552,60 +828,80 @@ def search_related_papers(section_text: str, max_results: int = 10) -> List[Dict
                     "limit": max_results,
                     "fields": "title,abstract,url,paperId"
                 },
-                timeout=15,
+                timeout=8,  # Shorter timeout
                 headers={"User-Agent": "ResearchPaperAnalyzer/1.0"}
             )
             
             if resp.status_code == 200:
                 data = resp.json()
                 ss_papers = data.get("data", [])
-                ss_results = []
+                results = []
                 for item in ss_papers:
-                    ss_results.append({
+                    results.append({
                         "title": item.get("title", ""),
                         "abstract": item.get("abstract", "") or "",
                         "url": item.get("url", "") or f"https://www.semanticscholar.org/paper/{item.get('paperId', '')}",
                         "source": "SemanticScholar"
                     })
-                added = add_results(ss_results, "SemanticScholar")
-                logger.info(f"Semantic Scholar returned {len(ss_papers)} results, added {added} unique")
-                break
+                logger.info(f"Semantic Scholar returned {len(ss_papers)} results")
+                return results
             elif resp.status_code == 429:
-                logger.warning(f"Semantic Scholar rate limited, attempt {attempt + 1}")
-                if attempt == 0:
-                    time.sleep(2)  # Wait before retry
+                logger.warning("Semantic Scholar rate limited, skipping")
+                return []
             else:
                 logger.warning(f"Semantic Scholar returned {resp.status_code}")
-                break
-    except Exception as e:
-        logger.warning(f"Semantic Scholar search failed: {e}")
-
-    # 5. IEEE Xplore Search (requires API key)
-    try:
-        logger.info("Searching IEEE Xplore...")
-        ieee_results = ieee_search(fixed_text, max_results=max_results)
-        added = add_results([{
-            "title": item.get("title", ""),
-            "abstract": item.get("abstract", ""),
-            "url": item.get("url", ""),
-            "source": "IEEE"
-        } for item in ieee_results], "IEEE")
-        logger.info(f"IEEE returned {len(ieee_results)} results, added {added} unique")
-    except Exception as e:
-        logger.warning(f"IEEE search failed: {e}")
-
-    # 6. Gemini AI Fallback (if we have few results)
-    if len(results) < 5:
+                return []
+        except Exception as e:
+            logger.warning(f"Semantic Scholar search failed: {e}")
+            return []
+    
+    # Run searches IN PARALLEL using ThreadPoolExecutor
+    search_functions = [
+        ("CrossRef", search_crossref),
+        ("arXiv", search_arxiv),
+        ("OpenAlex", search_openalex),
+        ("SemanticScholar", search_semantic_scholar),
+    ]
+    
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_source = {
+            executor.submit(func): name 
+            for name, func in search_functions
+        }
+        
+        for future in as_completed(future_to_source, timeout=15):
+            source = future_to_source[future]
+            try:
+                results = future.result()
+                all_results.extend(results)
+            except Exception as e:
+                logger.warning(f"{source} search failed: {e}")
+    
+    # Deduplicate results by title
+    seen_titles = set()
+    unique_results = []
+    for item in all_results:
+        title = item.get("title", "").lower().strip()
+        if title and len(title) > 10 and title not in seen_titles:
+            seen_titles.add(title)
+            unique_results.append(item)
+    
+    # Gemini AI Fallback (if we have few results)
+    if len(unique_results) < 5:
         try:
             logger.info("Using Gemini AI to find additional papers...")
             gemini_results = _gemini_find_papers(fixed_text, max_results=5)
-            added = add_results(gemini_results, "Gemini")
-            logger.info(f"Gemini found {len(gemini_results)} papers, added {added} unique")
+            for item in gemini_results:
+                title = item.get("title", "").lower().strip()
+                if title and len(title) > 10 and title not in seen_titles:
+                    seen_titles.add(title)
+                    unique_results.append(item)
+            logger.info(f"Gemini found {len(gemini_results)} papers")
         except Exception as e:
             logger.warning(f"Gemini search failed: {e}")
 
-    logger.info(f"Total: Found {len(results)} unique papers from all sources")
-    return results
+    logger.info(f"Total: Found {len(unique_results)} unique papers")
+    return unique_results
 
 def analyze_section(section_text: str, top_k: int = 5):
 

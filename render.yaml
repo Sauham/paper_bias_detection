@@ -1,0 +1,24 @@
+services:
+  # Backend API Service
+  - type: web
+    name: paper-bias-backend
+    env: python
+    runtime: python
+    region: oregon # Change to your preferred region (oregon, frankfurt, singapore)
+    buildCommand: pip install -r backend/requirements.txt && python -m spacy download en_core_web_sm
+    startCommand: cd backend && uvicorn api:app --host 0.0.0.0 --port $PORT
+    plan: starter # Options: free, starter, standard
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # Will prompt you to enter this value
+      - key: PYTHON_VERSION
+        value: "3.11.10"
+    healthCheckPath: /health
+    autoDeploy: true # Auto-deploy on git push
+
+  # Optional: Keep backend alive (prevents free tier spin-down)
+  # Uncomment if using free tier
+  # - type: cron
+  #   name: keep-backend-alive
+  #   schedule: "*/14 * * * *" # Every 14 minutes
+  #   command: curl https://paper-bias-backend.onrender.com/health

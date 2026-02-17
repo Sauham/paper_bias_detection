@@ -104,6 +104,20 @@ async def analyze(file: UploadFile = File(...)):
         )
 
 
+@app.get("/")
+async def root():
+    return {
+        "message": "Paper Bias Detection API",
+        "status": "running",
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/health",
+            "analyze": "/analyze (POST with PDF file)"
+        },
+        "bias_analysis_enabled": bias_analyzer.enabled
+    }
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}

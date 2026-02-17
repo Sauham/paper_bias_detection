@@ -937,7 +937,7 @@ export default function App() {
       setLoadingMessage('Analyzing for plagiarism...')
       
       const resp = await axios.post('/analyze', form, {
-        baseURL: import.meta.env.VITE_API_BASE || 'http://localhost:8000',
+        baseURL: import.meta.env.VITE_API_BASE || 'https://paper-bias-detection.onrender.com',
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000 // 2 minute timeout
       })

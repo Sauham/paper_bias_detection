@@ -8,7 +8,7 @@ import tempfile
 import os
 from dotenv import load_dotenv
 
-from src.gemini_bias_analyzer import GeminiBiasAnalyzer, result_to_dict
+from src.bias_analyzer import BiasAnalyzer, result_to_dict
 from src.plagiarism_checker import analyze_plagiarism, extract_sections
 from src.text_extraction import extract_text_robust
 
@@ -21,8 +21,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-bias_analyzer = GeminiBiasAnalyzer()
-logger.info(f"Bias analysis enabled: {bias_analyzer.enabled}")
+bias_analyzer = BiasAnalyzer()
+ai_provider = os.getenv("AI_PROVIDER", "gemini")
+logger.info(f"Bias analysis enabled: {bias_analyzer.enabled}, Primary provider: {ai_provider}")
 
 app = FastAPI(title="Paper Similarity & Bias Detection API")
 

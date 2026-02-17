@@ -1,0 +1,5 @@
+# Optional spaCy dependencies for enhanced NLP section extraction
+# The app works without this using regex-only extraction
+# Install separately: pip install -r requirements-spacy.txt
+
+spacy>=3.7.0,<3.8.0
